@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111b1b">
+  <title>Fieldwork 01 — Martian Potatoes</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    .rest-cutscene{position:fixed;inset:0;z-index:4}
+    .rest-fade{position:absolute;inset:0;background:#050908;pointer-events:none}
+    .rest-caption{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 8px #000;color:#f5f2e7}
+    .rest-caption span,.rest-caption strong{display:block;letter-spacing:.13em}
+    .rest-caption span{font-size:10px;color:#e5a56d;margin-bottom:8px}
+    .rest-caption strong{font-size:15px}
+    .resting .topbar,.resting .mission,.resting .environment,.resting .scene-label,.resting .target-label,.resting .toast,.resting .work-wrap,.resting .bottom,.resting .scale-note{visibility:hidden}
+  </style>
+</head>
+<body>
+  <main id="app">
+    <div id="scene" aria-label="Interactive 3D view of the Martian greenhouse"></div>
+    <div class="topbar">
+      <a class="brand" href="./" aria-label="Fieldwork home"><span class="brand-mark">✳</span><span>FIELDWORK <small> / 01</small></span></a>
+      <div class="top-center"><span class="status-dot"></span> MARS SURFACE <span class="slash">/</span> AGRICULTURAL HABITAT</div>
+      <button id="info-button" class="icon-button" aria-label="Open mission information">?</button>
+    </div>
+
+    <section class="mission panel" aria-labelledby="mission-heading">
+      <div class="eyebrow"><span class="status-dot"></span> ACTIVE MISSION <span class="mission-id">01 / 01</span></div>
+      <div class="mission-title-row"><div><p class="kicker">THE FIRST HARVEST</p><h1 id="mission-heading">A little dirt.<br>A big beginning.</h1></div><span class="mission-icon">✳</span></div>
+      <p class="mission-copy">A small step toward growing food on another world.</p>
+      <div class="divider"></div>
+      <div class="objective-label">CURRENT OBJECTIVE <span id="objective-count">00 / 40</span></div>
+      <h2 id="objective">Prepare the growing beds</h2>
+      <p id="instruction">Move toward a marked plot and hold SPACE to dig.</p>
+      <div id="dig-speed" class="mission-footer"><span id="dig-speed-label">5× DIGGING SPEED</span><span>vs assumed Mars pace*</span></div>
+      <p id="dig-speed-note" class="control-tip">*Illustrative 15s/plot baseline; not measured.</p>
+      <div class="progress-track"><div id="objective-progress"></div></div>
+      <div class="mission-footer"><span id="phase-number">PHASE 01 / 06</span><span id="phase-name">SOIL PREPARATION</span></div>
+    </section>
+
+    <section class="environment panel" aria-label="Habitat status">
+      <div class="env-heading">HABITAT STATUS <span>● LIVE</span></div>
+      <div class="env-row"><div><span class="env-label">LOCAL TIME</span><strong id="clock">08:00</strong></div><div class="day-icon" id="day-icon">☀</div></div>
+      <div class="env-meta"><span id="day-label">SOL 01 · DAYTIME</span><span>PRESSURIZED</span></div>
+      <div class="env-divider"></div>
+      <div class="env-details"><span><i></i> LIFE SUPPORT <b>ONLINE</b></span><span><i></i> GROW LIGHTS <b>ONLINE</b></span><span><i></i> SURFACE GRAVITY <b>0.38 G</b></span></div>
+    </section>
+
+    <div class="scene-label"><span>JEZERO FARM MODULE</span><b>18.44° N &nbsp; 77.45° E</b></div>
+    <div id="target-label" class="target-label" aria-live="polite"></div>
+    <div id="toast" class="toast" role="status"></div>
+    <div id="work-wrap" class="work-wrap" hidden><div class="work-top"><span id="work-label">PREPARING SOIL</span><span id="work-percent">0%</span></div><div class="work-track"><div id="work-fill"></div></div></div>
+
+    <div class="bottom">
+      <div class="controls panel">
+        <div class="controls-title">FIELD CONTROLS <span>DESKTOP</span></div>
+        <div class="control-list"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>SPACE</kbd><span>HOLD TO WORK</span></div><div><kbd>R</kbd><span>REST AT NIGHT</span></div></div>
+        <div class="control-tip">Right-drag to orbit · scroll or + / − to zoom · click a plot to target</div>
+      </div>
+      <div class="toolbox panel">
+        <div class="tools-header"><div><span class="eyebrow">MULTI-TOOL SYSTEM</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 TO SWITCH</span></div>
+        <div class="tools">
+          <button class="tool active" data-tool="shovel" aria-pressed="true"><span class="tool-number">01</span><span class="tool-symbol">♠</span><span><b>Shovel</b><small>BREAK GROUND</small></span><kbd>1</kbd></button>
+          <button class="tool" data-tool="aerator" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">✣</span><span><b>Aerator</b><small>LOOSEN SOIL</small></span><kbd>2</kbd></button>
+          <button class="tool" data-tool="auger" aria-pressed="false"><span class="tool-number">03</span><span class="tool-symbol">⌁</span><span><b>Auger</b><small>MAKE A HOLE</small></span><kbd>3</kbd></button>
+        </div>
+      </div>
+    </div>
+    <div class="scale-note">CONCEPT DEMONSTRATION <span>·</span> TIME &amp; GROWTH ARE ACCELERATED</div>
+
+    <div id="rest-cutscene" class="rest-cutscene" hidden>
+      <div id="rest-fade" class="rest-fade"></div>
+      <div class="rest-caption" role="status" aria-live="polite"><span>HABITAT / REST CYCLE</span><strong id="rest-caption">Returning to the habitat</strong></div>
+    </div>
+    <div id="intro" class="overlay">
+      <section class="intro-card" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+        <div class="intro-top"><span>FIELDWORK <b> / 01</b></span><span>CONCEPT EXPERIENCE</span></div>
+        <div class="intro-art"><span>✳</span><div>AN EXPERIMENT IN<br><b>GROWING BEYOND EARTH.</b></div></div>
+        <p class="kicker">WELCOME TO THE FARM MODULE</p>
+        <h2 id="intro-title">From red planet<br>to <em>green shoots.</em></h2>
+        <p>Meet a multi-tool built for a new kind of fieldwork. Prepare the soil, plant your crop, and see what it takes to bring a little life to Mars.</p>
+        <div class="intro-note"><span>✦</span> This is a conceptual demonstration. The environment and farming systems are imagined; the day and plant growth are accelerated.</div>
+        <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
+        <small>DESIGNED FOR DESKTOP · KEYBOARD + MOUSE</small>
+      </section>
+    </div>
+    <div id="info" class="overlay" hidden>
+      <section class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
+        <div class="intro-top"><span>FIELD NOTES <b> / 01</b></span><button id="close-info" class="icon-button" aria-label="Close mission information">×</button></div>
+        <h2 id="info-title">A farm is a system.</h2>
+        <p>This concept imagines a pressurized, climate-controlled greenhouse connected to a habitat. The growing medium is assumed to have already been treated for perchlorates and amended with nutrients; untreated Martian regolith is not ready for planting.</p>
+        <p>Recycled water, root-zone irrigation, supplemental lighting, power, and life support are essential dependencies. These are conceptual assumptions from the supplied research, not a validated Mars farming plan.</p>
+        <p>Digging is 5× faster than an assumed Mars work pace of 15 seconds per plot. This baseline is illustrative, not a measured or validated estimate of actual Martian digging performance. In the demo, each of the 40 plots takes 3 seconds, or about 2 minutes of active digging in total.</p>
+        <p>Watered potatoes reach harvest after 10 minutes of active play; resting at night advances their growth. The five growth stages and day/night cycle are accelerated for demonstration.</p>
+        <p>The astronaut's stepping motion uses Mars surface gravity (3.71 m/s², about 0.38 Earth gravity). Suit movement is illustrative; the rover, soil and crops are not a full physical simulation.</p>
+        <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
+      </section>
+    </div>
+    <div id="error" class="error" role="alert" hidden></div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
