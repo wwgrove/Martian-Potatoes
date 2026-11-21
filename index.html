@@ -13,7 +13,7 @@
     .rest-caption span,.rest-caption strong{display:block;letter-spacing:.13em}
     .rest-caption span{font-size:10px;color:#e5a56d;margin-bottom:8px}
     .rest-caption strong{font-size:15px}
-    .resting .topbar,.resting .mission,.resting .environment,.resting .scene-label,.resting .target-label,.resting .toast,.resting .work-wrap,.resting .bottom,.resting .scale-note{visibility:hidden}
+    .resting .topbar,.resting .mission,.resting .environment,.resting .scene-label,.resting .target-label,.resting .toast,.resting .work-wrap,.resting .bottom,.resting .scale-note,.resting .screen-controls,.resting .touch-controls{visibility:hidden}
   </style>
 </head>
 <body>
@@ -22,7 +22,7 @@
     <div class="topbar">
       <a class="brand" href="./" aria-label="Fieldwork home"><span class="brand-mark">✳</span><span>FIELDWORK <small> / 01</small></span></a>
       <div class="top-center"><span class="status-dot"></span> MARS SURFACE <span class="slash">/</span> AGRICULTURAL HABITAT</div>
-      <button id="info-button" class="icon-button" aria-label="Open mission information">?</button>
+      <div class="top-actions"><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button id="info-button" class="icon-button" aria-label="Open mission information">?</button></div>
     </div>
 
     <section class="mission panel" aria-labelledby="mission-heading">
@@ -31,6 +31,7 @@
       <p class="mission-copy">A small step toward growing food on another world.</p>
       <div class="divider"></div>
       <div class="objective-label">CURRENT OBJECTIVE <span id="objective-count">00 / 40</span></div>
+      <div id="mobile-clock" class="mobile-clock">SOL 01 · 08:00 · DAYTIME</div>
       <h2 id="objective">Prepare the growing beds</h2>
       <p id="instruction">Move toward a marked plot and hold SPACE to dig.</p>
       <div id="dig-speed" class="mission-footer"><span id="dig-speed-label">5× DIGGING SPEED</span><span>vs assumed Mars pace*</span></div>
@@ -54,9 +55,9 @@
 
     <div class="bottom">
       <div class="controls panel">
-        <div class="controls-title">FIELD CONTROLS <span>DESKTOP</span></div>
+        <div class="controls-title">FIELD CONTROLS <span>ALL DEVICES</span></div>
         <div class="control-list"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>SPACE</kbd><span>HOLD TO WORK</span></div><div><kbd>R</kbd><span>REST AT NIGHT</span></div></div>
-        <div class="control-tip">Right-drag to orbit · scroll or + / − to zoom · click a plot to target</div>
+        <div class="control-tip">Right-drag or Q/E and I/K to orbit · scroll or + / − to zoom · click a plot to target. Gamepad: left stick move, right stick orbit, A work, B rest, bumpers change tool.</div>
       </div>
       <div class="toolbox panel">
         <div class="tools-header"><div><span class="eyebrow">MULTI-TOOL SYSTEM</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 TO SWITCH</span></div>
@@ -65,6 +66,40 @@
           <button class="tool" data-tool="aerator" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">✣</span><span><b>Aerator</b><small>LOOSEN SOIL</small></span><kbd>2</kbd></button>
           <button class="tool" data-tool="auger" aria-pressed="false"><span class="tool-number">03</span><span class="tool-symbol">⌁</span><span><b>Auger</b><small>MAKE A HOLE</small></span><kbd>3</kbd></button>
         </div>
+      </div>
+      <section id="screen-controls" class="screen-controls panel" aria-label="On-screen simulation controls" hidden>
+        <div class="screen-controls-heading">ON-SCREEN CONTROLS <span>Tap a direction to move; tap again to stop</span></div>
+        <div class="screen-controls-body">
+          <div class="direction-pad" role="group" aria-label="Movement">
+            <button data-move="forward" aria-label="Move forward" aria-pressed="false">▲</button>
+            <button data-move="left" aria-label="Move left" aria-pressed="false">◀</button>
+            <button data-move="back" aria-label="Move backward" aria-pressed="false">▼</button>
+            <button data-move="right" aria-label="Move right" aria-pressed="false">▶</button>
+          </div>
+          <div class="screen-actions">
+            <button id="screen-work" aria-pressed="false">WORK: OFF</button>
+            <button id="screen-rest">REST</button>
+            <div class="camera-controls" role="group" aria-label="Camera">
+              <button data-camera="left" aria-label="Orbit camera left">↶</button>
+              <button data-camera="right" aria-label="Orbit camera right">↷</button>
+              <button data-camera="up" aria-label="Tilt camera up">↑</button>
+              <button data-camera="down" aria-label="Tilt camera down">↓</button>
+              <button data-camera="in" aria-label="Zoom in">+</button>
+              <button data-camera="out" aria-label="Zoom out">−</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
+      <div id="joystick" class="joystick" aria-hidden="true"><div id="joystick-knob" class="joystick-knob"></div><span>MOVE</span></div>
+      <div class="touch-actions">
+        <div class="touch-zoom" role="group" aria-label="Zoom">
+          <button data-camera="in" aria-label="Zoom in">+</button>
+          <button data-camera="out" aria-label="Zoom out">−</button>
+        </div>
+        <button id="touch-rest" aria-label="Rest at night">REST</button>
+        <button id="touch-work" aria-label="Hold to work" aria-pressed="false">WORK</button>
       </div>
     </div>
     <div class="scale-note">CONCEPT DEMONSTRATION <span>·</span> TIME &amp; GROWTH ARE ACCELERATED</div>
@@ -82,7 +117,7 @@
         <p>Meet a multi-tool built for a new kind of fieldwork. Prepare the soil, plant your crop, and see what it takes to bring a little life to Mars.</p>
         <div class="intro-note"><span>✦</span> This is a conceptual demonstration. The environment and farming systems are imagined; the day and plant growth are accelerated.</div>
         <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
-        <small>DESIGNED FOR DESKTOP · KEYBOARD + MOUSE</small>
+        <small>TOUCH · MOUSE · KEYBOARD · GAMEPAD</small>
       </section>
     </div>
     <div id="info" class="overlay" hidden>
@@ -94,6 +129,7 @@
         <p>Digging is 5× faster than an assumed Mars work pace of 15 seconds per plot. This baseline is illustrative, not a measured or validated estimate of actual Martian digging performance. In the demo, each of the 40 plots takes 3 seconds, or about 2 minutes of active digging in total.</p>
         <p>Watered potatoes reach harvest after 10 minutes of active play; resting at night advances their growth. The five growth stages and day/night cycle are accelerated for demonstration.</p>
         <p>The astronaut's stepping motion uses Mars surface gravity (3.71 m/s², about 0.38 Earth gravity). Suit movement is illustrative; the rover, soil and crops are not a full physical simulation.</p>
+        <p>On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Open Controls for alternative movement, work, camera and rest buttons: tap a direction again to stop; work stops after each plot. With a keyboard, use WASD or arrows to move, Space to work, 1–3 to change attachments, R to rest, Q/E and I/K to orbit, and +/− to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, A to work, B to rest, bumpers to change tools and Start for these notes.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>
     </div>

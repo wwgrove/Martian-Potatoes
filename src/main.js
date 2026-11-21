@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 import { createState, createGait, advanceGait, cameraRelativeMovement, digAlignment, alignmentPose, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, DIG_SECONDS, DIG_SPEED_MULTIPLIER, ASSUMED_MARS_DIG_SECONDS, STEP_LAUNCH_SPEED, advance, rest, isNight, growthStage, canWork, completeWork, phaseProgress } from './simulation.js';
+import { readGamepad, newlyPressed, joystickVector } from './controls.js';
 
 const $ = id => document.getElementById(id);
 const state = createState();
@@ -12,7 +13,7 @@ try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
 } catch (error) {
   $('error').hidden = false;
-  $('error').textContent = 'The 3D view could not start. Please enable WebGL or try a current desktop browser. ' + error.message;
+  $('error').textContent = 'The 3D view could not start. Please enable WebGL or try a current browser. ' + error.message;
   throw error;
 }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -461,6 +462,8 @@ let work = 0, workTarget = null, snap = null, toastTimer = 0, elapsed = 0;
 let restCutscene = null, restScene = null;
 const treadDistance = [0, 0];
 const keys = new Set();
+let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false;
+let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null, touchCamera = null;
 let cameraAngle = 0.38, cameraPitch = 0.62, cameraDistance = 11;
 let dragging = false, lastX = 0, lastY = 0;
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
@@ -571,6 +574,7 @@ function message(text) {
 }
 function selectTool(type) {
   if (!started || switching || restCutscene || activeTool === type) return;
+  setScreenMove(null); setScreenWork(false);
   switching = { from: activeTool, to: type, time: 0 };
   work = 0; workTarget = null; snap = null;
   message(`Changing attachment: ${activeTool} → ${type}`);
@@ -665,15 +669,16 @@ function updateUI() {
   let instruction = 'Your crop is harvested. Thank you for exploring the concept.';
   if (phase) {
     if (switching) instruction = 'The astronaut is exchanging attachments.';
-    else if (phase.tool && phase.tool !== activeTool) instruction = `Select the ${phase.tool} with its button or number key.`;
-    else if (state.phase === 0) instruction = `Move to a marked plot and hold SPACE to dig. Each plot takes ${DIG_SECONDS} seconds.`;
-    else if (state.phase === 5) instruction = 'Wait for orange harvest markers. At night, press R to rest and accelerate growth.';
-    else instruction = `Move to a marked plot and hold SPACE to ${phase.action}.`;
+    else if (phase.tool && phase.tool !== activeTool) instruction = `Select the ${phase.tool} attachment.`;
+    else if (state.phase === 0) instruction = `Move to a marked plot and work to dig. Each plot takes ${DIG_SECONDS} seconds.`;
+    else if (state.phase === 5) instruction = 'Wait for orange harvest markers. Rest at night to accelerate growth.';
+    else instruction = `Move to a marked plot and work to ${phase.action}.`;
   }
   $('instruction').textContent = instruction;
   const hours = Math.floor(state.minutes / 60), minutes = Math.floor(state.minutes % 60);
   $('clock').textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   $('day-label').textContent = `SOL ${String(state.sol).padStart(2, '0')} · ${isNight(state.minutes) ? 'NIGHTTIME' : 'DAYTIME'}`;
+  $('mobile-clock').textContent = `SOL ${String(state.sol).padStart(2, '0')} · ${$('clock').textContent} · ${isNight(state.minutes) ? 'NIGHTTIME' : 'DAYTIME'}`;
   $('day-icon').textContent = isNight(state.minutes) ? '☾' : '☀';
   $('work-wrap').hidden = !(work > 0 && phase);
   if (phase && work > 0) {
@@ -684,7 +689,7 @@ function updateUI() {
   if (currentTarget !== null && phase) {
     const plot = state.plots[currentTarget];
     const label = plot.stage === 5 ? ['PLANTED', 'SPROUT', 'LEAFING', 'MATURE PLANT', 'READY TO HARVEST'][growthStage(plot.growth)] : `PLOT ${String(currentTarget + 1).padStart(2, '0')}`;
-    $('target-label').textContent = `${label}  ·  ${canWork(state, plot, activeTool) ? 'HOLD SPACE TO ' + phase.action.toUpperCase() : 'FOLLOW CURRENT OBJECTIVE'}`;
+    $('target-label').textContent = `${label}  ·  ${canWork(state, plot, activeTool) ? 'WORK TO ' + phase.action.toUpperCase() : 'FOLLOW CURRENT OBJECTIVE'}`;
   } else $('target-label').textContent = '';
 }
 
@@ -710,16 +715,83 @@ function animateTracks(travel, turn = 0) {
   for (const wheel of wheels) wheel.mesh.rotation.z -= movement[wheel.side] / wheel.radius;
 }
 
+function setScreenMove(direction) {
+  screenMove = direction;
+  document.querySelectorAll('[data-move]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.move === direction)));
+}
+function setScreenWork(enabled) {
+  screenWork = enabled;
+  $('screen-work').setAttribute('aria-pressed', String(enabled));
+  $('screen-work').textContent = enabled ? 'WORK: ON' : 'WORK: OFF';
+  $('touch-work').setAttribute('aria-pressed', String(enabled));
+}
+function clearInputs() {
+  keys.clear(); dragging = false; touchCamera = null; touchWorkPointer = null; resetJoystick();
+  $('touch-work').classList.remove('pressed');
+  setScreenMove(null); setScreenWork(false); gamepadWorkReady = false;
+}
+function setControlsVisible(visible) {
+  $('screen-controls').hidden = !visible;
+  $('touch-controls').hidden = visible;
+  $('controls-button').setAttribute('aria-expanded', String(visible));
+  clearInputs();
+}
+setControlsVisible(false);
+function resetJoystick() {
+  joystickPointer = null; joystick = { right: 0, forward: 0 };
+  $('joystick-knob').style.transform = 'translate(-50%, -50%)';
+}
+function updateJoystick(event) {
+  const rect = $('joystick').getBoundingClientRect(), radius = rect.width / 2;
+  joystick = joystickVector(event.clientX - (rect.left + radius), event.clientY - (rect.top + radius), radius);
+  $('joystick-knob').style.transform = `translate(calc(-50% + ${joystick.right * radius}px), calc(-50% - ${joystick.forward * radius}px))`;
+}
+$('joystick').addEventListener('pointerdown', event => {
+  if (joystickPointer !== null || !started || !$('info').hidden || restCutscene) return;
+  event.preventDefault(); joystickPointer = event.pointerId;
+  $('joystick').setPointerCapture(event.pointerId); updateJoystick(event);
+});
+$('joystick').addEventListener('pointermove', event => { if (event.pointerId === joystickPointer) updateJoystick(event); });
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  $('joystick').addEventListener(type, event => { if (event.pointerId === joystickPointer) resetJoystick(); });
+}
+$('touch-work').addEventListener('pointerdown', event => {
+  if (touchWorkPointer !== null || !started || !$('info').hidden || restCutscene) return;
+  event.preventDefault(); touchWorkPointer = event.pointerId;
+  $('touch-work').setPointerCapture(event.pointerId); $('touch-work').classList.add('pressed');
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  $('touch-work').addEventListener(type, event => {
+    if (event.pointerId === touchWorkPointer) { touchWorkPointer = null; $('touch-work').classList.remove('pressed'); }
+  });
+}
+$('touch-work').addEventListener('click', event => { if (event.detail === 0) setScreenWork(!screenWork); });
+$('touch-rest').addEventListener('click', requestRest);
+$('controls-button').addEventListener('click', () => setControlsVisible($('screen-controls').hidden));
+document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => {
+  setScreenWork(false);
+  setScreenMove(screenMove === button.dataset.move ? null : button.dataset.move);
+}));
+$('screen-work').addEventListener('click', () => { setScreenMove(null); setScreenWork(!screenWork); });
+$('screen-rest').addEventListener('click', requestRest);
+document.querySelectorAll('[data-camera]').forEach(button => button.addEventListener('click', () => {
+  const action = button.dataset.camera;
+  if (action === 'left') cameraAngle += 0.25;
+  if (action === 'right') cameraAngle -= 0.25;
+  if (action === 'up') cameraPitch = Math.min(1.25, cameraPitch + 0.15);
+  if (action === 'down') cameraPitch = Math.max(0.3, cameraPitch - 0.15);
+  if (action === 'in') cameraDistance = Math.max(7, cameraDistance - 1);
+  if (action === 'out') cameraDistance = Math.min(20, cameraDistance + 1);
+}));
 $('start-button').addEventListener('click', () => { $('intro').hidden = true; started = true; message('Welcome to the farm module. Follow your first objective.'); renderer.domElement.focus(); });
-$('info-button').addEventListener('click', () => { keys.clear(); $('info').hidden = false; $('close-info').focus(); });
+$('info-button').addEventListener('click', () => { clearInputs(); $('info').hidden = false; $('close-info').focus(); });
 $('close-info').addEventListener('click', () => { $('info').hidden = true; $('info-button').focus(); });
-document.querySelectorAll('.tool').forEach(button => button.addEventListener('click', () => { selectTool(button.dataset.tool); renderer.domElement.focus(); }));
+document.querySelectorAll('.tool').forEach(button => button.addEventListener('click', () => selectTool(button.dataset.tool)));
 renderer.domElement.tabIndex = 0;
 renderer.domElement.addEventListener('contextmenu', event => event.preventDefault());
-renderer.domElement.addEventListener('pointerdown', event => {
-  if (event.button === 2) { dragging = true; lastX = event.clientX; lastY = event.clientY; renderer.domElement.setPointerCapture(event.pointerId); }
-  if (event.button !== 0 || !started) return;
-  mouse.set(event.clientX / innerWidth * 2 - 1, -(event.clientY / innerHeight) * 2 + 1);
+function targetPlot(x, y) {
+  if (!started || !$('info').hidden || restCutscene) return;
+  mouse.set(x / innerWidth * 2 - 1, -y / innerHeight * 2 + 1);
   raycaster.setFromCamera(mouse, camera);
   const hit = raycaster.intersectObjects(plots.map(plot => plot.soil))[0];
   if (hit) {
@@ -727,15 +799,41 @@ renderer.domElement.addEventListener('pointerdown', event => {
     pinnedTarget = requested;
     if (nearestTarget() !== requested) message('Move closer to that plot to work on it.');
   }
+}
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (event.pointerType === 'touch' && !touchCamera && started) {
+    touchCamera = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
+    renderer.domElement.setPointerCapture(event.pointerId);
+  } else if (event.button === 2) {
+    dragging = true; lastX = event.clientX; lastY = event.clientY; renderer.domElement.setPointerCapture(event.pointerId);
+  } else if (event.button === 0 && event.pointerType !== 'touch') targetPlot(event.clientX, event.clientY);
 });
 renderer.domElement.addEventListener('pointermove', event => {
+  if (touchCamera && event.pointerId === touchCamera.id) {
+    if (Math.hypot(event.clientX - touchCamera.startX, event.clientY - touchCamera.startY) > 8) touchCamera.moved = true;
+    if (touchCamera.moved) {
+      cameraAngle -= (event.clientX - touchCamera.x) * 0.006;
+      cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - touchCamera.y) * 0.005, 0.3, 1.25);
+    }
+    touchCamera.x = event.clientX; touchCamera.y = event.clientY;
+    return;
+  }
   if (!dragging) return;
   cameraAngle -= (event.clientX - lastX) * 0.006;
   cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - lastY) * 0.005, 0.3, 1.25);
   lastX = event.clientX; lastY = event.clientY;
 });
-renderer.domElement.addEventListener('pointerup', () => { dragging = false; });
-renderer.domElement.addEventListener('pointercancel', () => { dragging = false; });
+renderer.domElement.addEventListener('pointerup', event => {
+  if (touchCamera && event.pointerId === touchCamera.id) {
+    if (!touchCamera.moved) targetPlot(event.clientX, event.clientY);
+    touchCamera = null;
+  }
+  if (event.pointerType !== 'touch') dragging = false;
+});
+renderer.domElement.addEventListener('pointercancel', event => {
+  if (touchCamera && event.pointerId === touchCamera.id) touchCamera = null;
+  if (event.pointerType !== 'touch') dragging = false;
+});
 window.addEventListener('wheel', event => {
   if (!started || !$('info').hidden || restCutscene) return;
   event.preventDefault();
@@ -743,7 +841,8 @@ window.addEventListener('wheel', event => {
   cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * scale, 7, 20);
 }, { passive: false });
 window.addEventListener('keydown', event => {
-  if (!started || !$('info').hidden || restCutscene || event.target instanceof HTMLButtonElement) return;
+  if (!started || !$('info').hidden || restCutscene) return;
+  if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   keys.add(event.code);
   if (event.repeat) return;
@@ -752,23 +851,26 @@ window.addEventListener('keydown', event => {
   if (event.code === 'Digit3') selectTool('auger');
   if (event.code === 'Equal' || event.code === 'NumpadAdd') cameraDistance = Math.max(7, cameraDistance - 1);
   if (event.code === 'Minus' || event.code === 'NumpadSubtract') cameraDistance = Math.min(20, cameraDistance + 1);
-  if (event.code === 'KeyR') {
-    if (!isNight(state.minutes)) message('Rest is available at night, from 19:00 to 06:00.');
-    else if (switching) message('Finish changing attachments before resting.');
-    else {
-      if (!restScene) restScene = createRestScene();
-      rest(state); keys.clear(); dragging = false;
-      work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0;
-      gait.height = 0; gait.velocity = 0; astronaut.position.y = 0;
-      restCutscene = { time: 0 };
-      $('rest-caption').textContent = 'Returning to the habitat';
-      $('rest-fade').style.opacity = '0';
-      $('rest-cutscene').hidden = false; $('app').classList.add('resting');
-    }
-  }
+  if (event.code === 'KeyR') requestRest();
 });
+function requestRest() {
+  if (!started || !$('info').hidden || restCutscene) return;
+  if (!isNight(state.minutes)) message('Rest is available at night, from 19:00 to 06:00.');
+  else if (switching) message('Finish changing attachments before resting.');
+  else {
+    if (!restScene) restScene = createRestScene();
+    rest(state); clearInputs();
+    work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0;
+    gait.height = 0; gait.velocity = 0; astronaut.position.y = 0;
+    restCutscene = { time: 0 };
+    $('rest-caption').textContent = 'Returning to the habitat';
+    $('rest-fade').style.opacity = '0';
+    $('rest-cutscene').hidden = false; $('app').classList.add('resting');
+  }
+}
 window.addEventListener('keyup', event => keys.delete(event.code));
-window.addEventListener('blur', () => { keys.clear(); dragging = false; });
+window.addEventListener('blur', clearInputs);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearInputs(); });
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   if (restScene) { restScene.view.aspect = innerWidth / innerHeight; restScene.view.updateProjectionMatrix(); }
@@ -779,19 +881,42 @@ let previous = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - previous) / 1000, 1); previous = now;
+  if (document.hidden) return;
+  const gamepad = readGamepad(navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null);
+  const wasStarted = started;
+  if (!gamepad.buttons[0]) gamepadWorkReady = true;
+  if (newlyPressed(gamepad.buttons, previousGamepadButtons, 0) && !started) $('start-button').click();
+  if (started && !restCutscene && wasStarted) {
+    if (newlyPressed(gamepad.buttons, previousGamepadButtons, 9)) {
+      if ($('info').hidden) $('info-button').click(); else $('close-info').click();
+    }
+    if ($('info').hidden) {
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 1)) requestRest();
+      const tools = ['shovel', 'aerator', 'auger'];
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 4)) selectTool(tools[(tools.indexOf(activeTool) + 2) % 3]);
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 5)) selectTool(tools[(tools.indexOf(activeTool) + 1) % 3]);
+    }
+  }
+  if (!started || !$('info').hidden || restCutscene || !wasStarted) gamepadWorkReady = false;
+  previousGamepadButtons = gamepad.buttons;
   if (restCutscene) { updateRestCutscene(dt); return; }
   if (started && $('info').hidden) {
     elapsed += dt; advance(state, dt); updateSwitch(dt);
-    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
-    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown'));
-    const moving = (right !== 0 || forward !== 0) && !switching && !keys.has('Space');
+    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + Number(screenMove === 'right') - Number(screenMove === 'left') + gamepad.right + joystick.right;
+    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + Number(screenMove === 'forward') - Number(screenMove === 'back') + gamepad.forward + joystick.forward;
+    const working = keys.has('Space') || screenWork || touchWorkPointer !== null || (gamepadWorkReady && gamepad.buttons[0]);
+    cameraAngle += (Number(keys.has('KeyQ')) - Number(keys.has('KeyE')) - gamepad.orbit) * dt * 1.5;
+    cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyI')) - Number(keys.has('KeyK')) + gamepad.tilt) * dt, 0.3, 1.25);
+    cameraDistance = THREE.MathUtils.clamp(cameraDistance + (Number(gamepad.buttons[6]) - Number(gamepad.buttons[7])) * dt * 5, 7, 20);
+    const moving = (right !== 0 || forward !== 0) && !switching && !working;
     let walking = Boolean(switching && (switching.time < 0.8 || switching.time > 2.7));
     if (moving) {
       camera.getWorldDirection(viewDirection);
       const direction = cameraRelativeMovement(right, forward, Math.atan2(-viewDirection.x, -viewDirection.z));
       const dx = direction.x, dz = direction.z;
       const oldX = rig.position.x, oldZ = rig.position.z;
-      rig.position.x += dx * dt * 2.3; rig.position.z += dz * dt * 2.3;
+      const speed = Math.min(1, Math.hypot(right, forward));
+      rig.position.x += dx * dt * 2.3 * speed; rig.position.z += dz * dt * 2.3 * speed;
       const radius = Math.hypot(rig.position.x, rig.position.z);
       if (radius > MOVEMENT_RADIUS) { rig.position.x *= MOVEMENT_RADIUS / radius; rig.position.z *= MOVEMENT_RADIUS / radius; }
       rig.rotation.y = Math.atan2(-dx, -dz);
@@ -800,9 +925,9 @@ function frame(now) {
       walking = travel > 0.00001;
       animateTracks(travel);
     } else machine.position.y = 0;
-    currentTarget = state.phase === 0 && workTarget !== null && keys.has('Space') && !switching ? workTarget : nearestTarget();
+    currentTarget = state.phase === 0 && workTarget !== null && working && !switching ? workTarget : nearestTarget();
     const phase = PHASES[state.phase], plot = state.plots[currentTarget];
-    if (phase && currentTarget !== null && keys.has('Space') && !switching && canWork(state, plot, activeTool)) {
+    if (phase && currentTarget !== null && working && !switching && canWork(state, plot, activeTool)) {
       if (workTarget !== currentTarget) {
         work = 0; workTarget = currentTarget;
         if (state.phase === 0) {
@@ -825,6 +950,7 @@ function frame(now) {
       if (activeTool === 'auger') mounted.auger.rotation.y += dt * 8;
       if (activeTool === 'aerator' && state.phase === 1) mounted.aerator.userData.roller.rotation.x += dt * 4;
       if (work >= phase.duration) {
+        setScreenWork(false);
         completeWork(state, plot); work = 0; workTarget = null; snap = null; pinnedTarget = null; attachmentPivot.rotation.x = 0;
         if (state.phase >= 6) message('Mission complete! The first harvest is ready.');
         else message(state.phase !== PHASES.indexOf(phase) ? `Objective complete. Next: ${PHASES[state.phase].title}.` : `Plot ${currentTarget + 1} complete.`);
