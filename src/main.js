@@ -583,6 +583,7 @@ let dragging = false, lastX = 0, lastY = 0;
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const targetPoint = new THREE.Vector3(), cameraPoint = new THREE.Vector3(), viewDirection = new THREE.Vector3();
 const interactionPosition = new THREE.Vector3(), interactionProjection = new THREE.Vector3(), astronautWorld = new THREE.Vector3();
+const coarsePointer = window.matchMedia('(pointer: coarse)');
 const seedHandPosition = new THREE.Vector3(), seedGroundPosition = new THREE.Vector3(0, 0.12, -TOOL_OFFSET);
 
 function stopPlanting(returnToHandle) {
@@ -795,6 +796,7 @@ function updateToolUI() {
   document.querySelectorAll('.tool').forEach(button => {
     const selected = button.dataset.tool === activeTool;
     button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
+    if (selected) $('current-tool').textContent = button.querySelector('b').textContent;
   });
   $('machine-toggle').textContent = parked ? 'PICK UP TOOL' : 'PARK TOOL';
   $('machine-toggle').setAttribute('aria-pressed', String(parked));
@@ -925,6 +927,10 @@ function updateInteractionPrompt() {
     }
   }
   if (!action) { prompt.hidden = true; return; }
+  if (coarsePointer.matches) {
+    if (key === 'SPACE') { key = 'WORK'; alternative = ''; }
+    else if (key === 'F') { key = 'TAP'; alternative = parked ? 'PICK UP TOOL' : 'PARK TOOL'; }
+  }
   interactionProjection.copy(interactionPosition).project(camera);
   if (interactionProjection.z < -1 || interactionProjection.z > 1 || Math.abs(interactionProjection.x) > 1 || Math.abs(interactionProjection.y) > 1) { prompt.hidden = true; return; }
   prompt.hidden = false;
@@ -1057,6 +1063,10 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   });
 }
 $('touch-work').addEventListener('click', event => { if (event.detail === 0) setScreenWork(!screenWork); });
+$('tools-toggle').addEventListener('click', () => {
+  const open = $('tool-menu').parentElement.classList.toggle('tools-open');
+  $('tools-toggle').setAttribute('aria-expanded', String(open));
+});
 $('machine-toggle').addEventListener('click', toggleMachine);
 $('controls-button').addEventListener('click', () => setControlsVisible($('screen-controls').hidden));
 document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => {

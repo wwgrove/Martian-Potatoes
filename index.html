@@ -25,12 +25,13 @@
       <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button id="info-button" class="icon-button" aria-label="Open mission information">?</button></div>
     </div>
 
+    <div class="mission-hud">
     <section class="mission panel" aria-labelledby="mission-heading">
       <div class="eyebrow"><span class="status-dot"></span> ACTIVE MISSION <span class="mission-id">01 / 01</span></div>
       <div class="mission-title-row"><div><p class="kicker">THE FIRST HARVEST</p><h1 id="mission-heading">A little dirt.<br>A big beginning.</h1></div><span class="mission-icon">✳</span></div>
       <p class="mission-copy">A small step toward growing food on another world.</p>
       <div class="divider"></div>
-      <div class="objective-label">CURRENT OBJECTIVE <span id="objective-count">00 / 20</span></div>
+      <div class="objective-label">OBJECTIVE <span id="objective-count">00 / 20</span></div>
       <div id="mobile-clock" class="mobile-clock">SOL 01 · 08:00 · DAYTIME</div>
       <h2 id="objective">Loosen and mix the soil</h2>
       <p id="instruction">Move toward a blue-marked plot and hold SPACE to till.</p>
@@ -39,19 +40,6 @@
       <div id="harvest-total" class="harvest-total">POTATOES HARVESTED · 0</div>
       <div id="save-status" class="save-status" role="status">AUTOSAVE ON · THIS DEVICE</div>
     </section>
-
-    <section class="environment panel" aria-label="Habitat status">
-      <div class="env-heading">HABITAT STATUS <span>● LIVE</span></div>
-      <div class="env-row"><div><span class="env-label">LOCAL TIME</span><strong id="clock">08:00</strong></div><div class="day-icon" id="day-icon">☀</div></div>
-      <div class="env-meta"><span id="day-label">SOL 01 · DAYTIME</span><span>PRESSURIZED</span></div>
-      <div class="env-divider"></div>
-      <div class="env-details"><span><i></i> LIFE SUPPORT <b>ONLINE</b></span><span><i></i> GROW LIGHTS <b>ONLINE</b></span><span><i></i> SURFACE GRAVITY <b>0.38 G</b></span></div>
-    </section>
-
-    <div class="scene-label"><span>JEZERO FARM MODULE</span><b>18.44° N &nbsp; 77.45° E</b></div>
-    <div id="target-label" class="target-label" aria-live="polite"></div>
-    <div id="interaction-prompt" class="interaction-prompt" role="status" hidden><kbd id="interaction-key"></kbd><span><strong id="interaction-action"></strong><small id="interaction-alternative"></small></span></div>
-    <div id="toast" class="toast" role="status"></div>
     <div id="work-wrap" class="work-wrap" hidden>
       <div class="work-insight">
         <svg class="work-diagram" viewBox="0 0 90 76" aria-hidden="true">
@@ -73,6 +61,20 @@
       </div>
       <div class="work-top"><span id="work-label">PREPARING SOIL</span><span id="work-percent">0%</span></div><div class="work-track"><div id="work-fill"></div></div>
     </div>
+    </div>
+
+    <section class="environment panel" aria-label="Habitat status">
+      <div class="env-heading">HABITAT STATUS <span>● LIVE</span></div>
+      <div class="env-row"><div><span class="env-label">LOCAL TIME</span><strong id="clock">08:00</strong></div><div class="day-icon" id="day-icon">☀</div></div>
+      <div class="env-meta"><span id="day-label">SOL 01 · DAYTIME</span><span>PRESSURIZED</span></div>
+      <div class="env-divider"></div>
+      <div class="env-details"><span><i></i> LIFE SUPPORT <b>ONLINE</b></span><span><i></i> GROW LIGHTS <b>ONLINE</b></span><span><i></i> SURFACE GRAVITY <b>0.38 G</b></span></div>
+    </section>
+
+    <div class="scene-label"><span>JEZERO FARM MODULE</span><b>18.44° N &nbsp; 77.45° E</b></div>
+    <div id="target-label" class="target-label" aria-live="polite"></div>
+    <div id="interaction-prompt" class="interaction-prompt" role="status" hidden><kbd id="interaction-key"></kbd><span><strong id="interaction-action"></strong><small id="interaction-alternative"></small></span></div>
+    <div id="toast" class="toast" role="status"></div>
 
     <div class="bottom">
       <div class="controls panel">
@@ -81,13 +83,16 @@
         <div class="control-tip">F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q/E and I/K orbit · scroll or + / − zoom. Gamepad: B parks / picks up, A interacts.</div>
       </div>
       <div class="toolbox panel">
-        <div id="tool-description" class="tool-description" role="tooltip" hidden></div>
+        <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span>TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
+        <div id="tool-menu" class="tool-menu">
         <div class="tools-header"><div><span class="eyebrow">SEALED PTO TOOL CADDY</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
         <div class="tools">
           <button class="tool active" data-tool="tiller" data-description="Counter-rotating curved tines loosen compacted regolith into an airy seedbed without pushing the tracked machine forward." aria-describedby="tool-description" aria-pressed="true"><span class="tool-number">01</span><span class="tool-symbol">✣</span><span><b>Rotary tiller</b><small>LOOSEN SOIL</small></span><kbd>1</kbd></button>
           <button class="tool" data-tool="plow" data-description="Adjustable wings open planting furrows and later hill soil around shoots, protecting tubers from light." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">⌄</span><span><b>Hilling plow</b><small>FURROW &amp; HILL</small></span><kbd>2</kbd></button>
           <button class="tool" data-tool="auger" data-description="A helical head bores planting holes and can mix growing media or take soil cores with little downward force in low gravity." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">03</span><span class="tool-symbol">⌁</span><span><b>Mixing auger</b><small>BORE &amp; SAMPLE</small></span><kbd>3</kbd></button>
           <button class="tool" data-tool="sifter" data-description="A vibrating slotted lifter passes under the crop and sifts away soil, bringing potatoes up without slicing them." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">04</span><span class="tool-symbol">▥</span><span><b>Vibratory lifter</b><small>GENTLE HARVEST</small></span><kbd>4</kbd></button>
+        </div>
+        <div id="tool-description" class="tool-description" role="tooltip" hidden></div>
         </div>
       </div>
       <section id="screen-controls" class="screen-controls panel" aria-label="On-screen simulation controls" hidden>
@@ -152,7 +157,7 @@
         <p>Progress saves automatically in this browser on this device. It does not sync between devices and may be removed if site data is cleared. The mission panel warns you if saving is unavailable.</p>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.</p>
-        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q/E and I/K to orbit, and +/− to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
+        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q/E and I/K to orbit, and +/− to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>
     </div>
