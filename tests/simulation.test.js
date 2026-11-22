@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, createGait, advanceGait, cameraRelativeMovement, digAlignment, alignmentPose, advance, rest, canWork, completeWork, growthStage, DIG_SECONDS, DIG_SPEED_MULTIPLIER, ASSUMED_MARS_DIG_SECONDS, GROW_SECONDS, PLOT_COUNT, PHASES, MARS_GRAVITY, STEP_LAUNCH_SPEED } from '../src/simulation.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
+import { loadProgress, saveProgress, SAVE_KEY } from '../src/persistence.js';
+import { detachUpright } from '../src/scene-helpers.js';
+import { Group, Scene, Vector3 } from '../vendor/three.module.js';
 
 test('movement follows the camera after orbiting, including diagonals', () => {
   for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.73]) {
@@ -19,136 +22,351 @@ test('movement follows the camera after orbiting, including diagonals', () => {
   assert.deepEqual(cameraRelativeMovement(0, 0, 1), { x: 0, z: 0 });
 });
 
-test('digging aligns the attachment to each plot without leaving the habitat', () => {
-  const offset = 0.85 + 0.82 * 1.05, limit = 7.7;
-  for (let row = 0; row < 5; row++) for (let col = 0; col < 8; col++) {
-    const target = { x: (col - 3.5) * 2, z: (row - 2) * 2.1 - 0.3 };
-    for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.6]) {
-      const end = digAlignment({ x: 0, z: 0, angle }, target, offset, limit);
-      assert.ok(Math.hypot(end.x, end.z) <= limit);
-      assert.ok(Math.abs(end.x - Math.sin(end.angle) * offset - target.x) < 1e-10);
-      assert.ok(Math.abs(end.z - Math.cos(end.angle) * offset - target.z) < 1e-10);
-      assert.ok(Math.abs(Math.sin(end.angle * 2)) < 1e-10);
-    }
+test('a parked astronaut keeps the same camera-relative facing as the camera orbits', () => {
+  for (const [facing, before, after] of [[0.4, 0, 1], [-1, 1, -0.5], [2, Math.PI - 0.1, -Math.PI + 0.1]]) {
+    const updated = followCameraTurn(facing, before, after);
+    assert.ok(Math.abs(Math.sin(updated - after - facing + before)) < 1e-10);
+    assert.ok(Math.abs(updated - facing) <= Math.PI);
   }
-  const end = digAlignment({ x: 0, z: 2, angle: 0.1 }, { x: 0.2, z: 0 }, offset, limit);
-  assert.ok(Math.abs(end.angle) < 1e-10);
+  assert.equal(followCameraTurn(0.7, 1, 1), 0.7);
 });
 
-test('alignment turns toward travel, walks straight, then turns to the plot', () => {
-  const start = { x: 1, z: 2, angle: 0 };
-  const end = { x: 3, z: 2, angle: Math.PI / 2 };
-  assert.deepEqual(alignmentPose(start, end, 0), start);
-  const turning = alignmentPose(start, end, 0.125);
-  assert.equal(turning.x, start.x);
-  assert.equal(turning.z, start.z);
-  const walking = alignmentPose(start, end, 0.5);
-  assert.equal(walking.x, 2);
-  assert.equal(walking.z, 2);
-  assert.ok(Math.abs(walking.angle + Math.PI / 2) < 1e-10);
-  const aligned = alignmentPose(start, end, 1);
-  assert.equal(aligned.x, end.x);
-  assert.equal(aligned.z, end.z);
-  assert.ok(Math.abs(Math.sin((aligned.angle - end.angle) / 2)) < 1e-10);
-  const turningInPlace = alignmentPose(start, { x: 1, z: 2, angle: Math.PI / 2 }, 0.5);
-  assert.equal(turningInPlace.x, 1);
-  assert.ok(Math.abs(turningInPlace.angle - Math.PI / 4) < 1e-10);
-  for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 3.2]) {
-    const from = { x: 0, z: 0, angle };
-    const to = digAlignment(from, { x: 3, z: -2 }, 1.711, 7.7);
-    for (const progress of [0, 0.125, 0.25, 0.5, 0.75, 0.875, 1]) {
-      const pose = alignmentPose(from, to, progress);
-      assert.ok(Math.hypot(pose.x, pose.z) <= 7.7);
-      if (progress === 0.5) {
-        const dx = to.x - from.x, dz = to.z - from.z;
-        const length = Math.hypot(dx, dz);
-        assert.ok(Math.abs(-Math.sin(pose.angle) - dx / length) < 1e-10);
-        assert.ok(Math.abs(-Math.cos(pose.angle) - dz / length) < 1e-10);
+test('detaching at any heading preserves an upright astronaut that can turn correctly', () => {
+  for (const rigAngle of [-2.7, -1.7, 0, 1.7, 2.7]) {
+    const scene = new Scene(), rig = new Group(), astronaut = new Group();
+    scene.add(rig); rig.add(astronaut);
+    rig.position.set(1, 0, -2); rig.rotation.y = rigAngle;
+    astronaut.position.set(0, 0, 1.05); astronaut.rotation.y = 0.1;
+    const position = astronaut.getWorldPosition(new Vector3());
+    const direction = astronaut.getWorldDirection(new Vector3());
+    detachUpright(scene, astronaut);
+    assert.ok(astronaut.getWorldPosition(new Vector3()).distanceTo(position) < 1e-10);
+    assert.ok(astronaut.getWorldDirection(new Vector3()).distanceTo(direction) < 1e-10);
+    assert.equal(astronaut.rotation.x, 0);
+    assert.equal(astronaut.rotation.z, 0);
+    for (const heading of [-2.2, 0, 2.2]) {
+      astronaut.rotation.y = heading;
+      const actual = astronaut.getWorldDirection(new Vector3());
+      assert.ok(actual.distanceTo(new Vector3(Math.sin(heading), 0, Math.cos(heading))) < 1e-10);
+    }
+  }
+});
+
+test('the tool can align to every plot from anywhere in the movement area', () => {
+  const offset = 0.85 + 0.82 * 1.05, limit = 7.7;
+  for (let row = 0; row < PLOT_ROWS; row++) for (let col = 0; col < PLOT_COLUMNS; col++) {
+    const target = { x: (col - (PLOT_COLUMNS - 1) / 2) * 2, z: (row - (PLOT_ROWS - 1) / 2) * 2.1 - 0.3 };
+    for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.6]) {
+      for (const start of [{ x: 0, z: 0, angle }, { x: 7.7, z: 0, angle }, { x: 0, z: -7.7, angle }]) {
+        const end = digAlignment(start, target, offset, limit, 0.85);
+        assert.ok(Math.hypot(end.x, end.z) <= limit);
+        assert.ok(Math.abs(end.x - Math.sin(end.angle) * offset - target.x) < 1e-10);
+        assert.ok(Math.abs(end.z - Math.cos(end.angle) * offset - target.z) < 1e-10);
+        const approach = createApproach(start, end, 0.85);
+        for (let i = 0; i < 10; i++) {
+          const { pose } = advanceApproach(approach, approach.duration / 10);
+          assert.ok(Math.hypot(pose.x, pose.z) <= limit + 1.7 + 1e-10);
+        }
       }
     }
   }
 });
 
-test('digging is five times faster than the assumed baseline and other timings are unchanged', () => {
+test('the tracks turn in place before driving forward and align at the target', () => {
+  const start = { x: 0, z: 0, angle: 0 }, end = { x: 2, z: 0, angle: 0 }, offset = 0.85;
+  const approach = createApproach(start, end, offset);
+  const center = pose => ({ x: pose.x - Math.sin(pose.angle) * offset, z: pose.z - Math.cos(pose.angle) * offset });
+  const turning = advanceApproach(approach, approach.turnInDuration / 2);
+  assert.equal(turning.travel, 0);
+  assert.ok(Math.abs(turning.turn) > 0);
+  assert.ok(Math.abs(center(turning.pose).x) < 1e-10);
+  assert.ok(Math.abs(center(turning.pose).z + offset) < 1e-10);
+  advanceApproach(approach, approach.turnInDuration / 2);
+  const driving = advanceApproach(approach, approach.travelDuration / 2);
+  assert.ok(driving.travel > 0);
+  assert.equal(driving.turn, 0);
+  assert.ok(Math.abs(-Math.sin(driving.pose.angle) - 1) < 1e-10);
+  advanceApproach(approach, approach.travelDuration / 2);
+  const finalTurn = advanceApproach(approach, approach.turnOutDuration / 2);
+  assert.equal(finalTurn.travel, 0);
+  assert.ok(Math.abs(center(finalTurn.pose).x - 2) < 1e-10);
+  assert.ok(Math.abs(center(finalTurn.pose).z + offset) < 1e-10);
+  const done = advanceApproach(approach, approach.duration);
+  assert.ok(Math.abs(done.pose.x - end.x) < 1e-10);
+  assert.ok(Math.abs(done.pose.z - end.z) < 1e-10);
+  assert.ok(Math.abs(Math.sin(done.pose.angle - end.angle)) < 1e-10);
+});
+
+test('approach finishes before work begins, including when a frame crosses the boundary', () => {
+  const approach = createApproach({ x: 0, z: 0, angle: 3.1 }, { x: 2, z: 0, angle: -3.1 });
+  const first = advanceApproach(approach, approach.duration / 2);
+  assert.equal(first.workSeconds, 0);
+  const second = advanceApproach(approach, approach.duration);
+  assert.ok(Math.abs(second.workSeconds - approach.duration / 2) < 1e-10);
+  assert.equal(second.pose.x, 2);
+  assert.equal(advanceApproach(approach, 0.5).workSeconds, 0.5);
+  assert.throws(() => advanceApproach(approach, -1), RangeError);
+});
+
+test('automatic routing follows rows from any starting plot and skips unavailable plots', () => {
+  const remaining = new Set(Array.from({ length: PLOT_COUNT }, (_, index) => index));
+  let current = 0, direction = 1;
+  const visited = [current]; remaining.delete(current);
+  while (remaining.size) {
+    const next = nextSerpentinePlot([...remaining], current, direction);
+    current = next.index; direction = next.direction;
+    visited.push(current); remaining.delete(current);
+  }
+  assert.deepEqual(visited, [0, 1, 2, 3, 4, 9, 8, 7, 6, 5, 10, 11, 12, 13, 14, 19, 18, 17, 16, 15]);
+  assert.deepEqual(nextSerpentinePlot([10, 13, 18], 12, 1), { index: 13, direction: 1 });
+  assert.deepEqual(nextSerpentinePlot([10, 18], 13, 1), { index: 10, direction: -1 });
+  assert.deepEqual(nextSerpentinePlot([5, 16, 19], 10, -1), { index: 5, direction: 1 });
+  assert.equal(nextSerpentinePlot([], 0, 1), null);
+  for (let start = 0; start < PLOT_COUNT; start++) {
+    const pending = new Set(Array.from({ length: PLOT_COUNT }, (_, index) => index));
+    let plot = start, step = start % PLOT_COLUMNS < PLOT_COLUMNS / 2 ? -1 : 1;
+    pending.delete(plot);
+    while (pending.size) {
+      const next = nextSerpentinePlot([...pending], plot, step);
+      assert.ok(pending.has(next.index));
+      pending.delete(next.index); plot = next.index; step = next.direction;
+    }
+  }
+});
+test('mission has 20 plots and requires the appropriate powered heads', () => {
   const state = createState();
-  assert.equal(PLOT_COUNT, 40);
-  assert.equal(state.plots.length, 40);
-  assert.equal(ASSUMED_MARS_DIG_SECONDS / DIG_SECONDS, DIG_SPEED_MULTIPLIER);
-  assert.equal(DIG_SECONDS * PLOT_COUNT, 120);
-  assert.deepEqual(PHASES.map(phase => phase.duration * PLOT_COUNT), [120, 24, 24, 18, 18, 24]);
+  assert.equal(PLOT_COUNT, 20);
+  assert.equal(state.plots.length, 20);
+  assert.ok(PHASES.every(phase => phase.action === 'plant' ? phase.duration === 3 : phase.action === 'water' ? phase.duration === 5 : phase.duration <= 1.2));
   assert.equal(canWork(state, state.plots[0], 'auger'), false);
-  assert.equal(canWork(state, state.plots[0], 'shovel'), true);
+  assert.equal(canWork(state, state.plots[0], 'tiller'), true);
   for (const plot of state.plots) completeWork(state, plot);
   assert.equal(state.phase, 1);
-  assert.equal(canWork(state, state.plots[0], 'aerator'), true);
+  assert.equal(canWork(state, state.plots[0], 'plow'), true);
 });
 
-test('walking follows Martian gravity and comes to rest on the ground', () => {
+test('hand planting reaches the bin, carries and places a potato, and returns to the handle', () => {
+  const start = plantingPose(0), pickup = plantingPose(0.4), carry = plantingPose(0.5);
+  const deposit = plantingPose(0.72), finish = plantingPose(1);
+  assert.deepEqual([start.x, start.z, start.bend, start.carrying], [0, 1.05, 0, false]);
+  assert.ok(pickup.bend > 0.9 && pickup.carrying);
+  assert.equal(carry.carrying, true);
+  assert.equal(deposit.carrying, false);
+  assert.equal(deposit.planted, true);
+  assert.equal(deposit.drop, 1);
+  assert.ok(Math.abs(finish.x) < 1e-10 && Math.abs(finish.z - 1.05) < 1e-10);
+  assert.equal(finish.bend, 0);
+});
+
+test('walking alternates foot lift with planted stance and settles smoothly', () => {
   const gait = createGait();
-  advanceGait(gait, true, 0.1);
-  assert.ok(Math.abs(gait.height - (STEP_LAUNCH_SPEED * 0.1 - MARS_GRAVITY * 0.1 ** 2 / 2)) < 1e-10);
-  assert.ok(Math.abs(gait.velocity - (STEP_LAUNCH_SPEED - MARS_GRAVITY * 0.1)) < 1e-10);
-  advanceGait(gait, false, 1);
-  assert.equal(gait.height, 0);
-  assert.equal(gait.velocity, 0);
-  assert.equal(gait.steps, 1);
+  advanceGait(gait, 0.3, 0.3);
+  const left = gaitLegPose(gait, 0), right = gaitLegPose(gait, 1);
+  assert.equal(left.lift, 0);
+  assert.ok(right.lift > 0);
+  assert.ok(left.knee < 0 && right.knee < 0);
+  assert.ok(Math.abs(left.hip + left.knee + left.ankle) < 0.01);
+  assert.ok(gaitBodyOffset(gait) < 0);
+  const previous = gait.blend;
+  advanceGait(gait, 0, 1);
+  assert.ok(gait.blend < previous / 100);
+  assert.ok(Math.abs(gaitBodyOffset(gait)) < 0.001);
+  assert.throws(() => advanceGait(gait, -1, 0.1), RangeError);
 });
 
-test('gravity-based gait is stable across frame sizes', () => {
+test('distance-based gait is stable across frame sizes and continuous between steps', () => {
   const single = createGait(), split = createGait();
-  advanceGait(single, true, 1);
-  for (let i = 0; i < 10; i++) advanceGait(split, true, 0.1);
-  assert.equal(single.steps, split.steps);
-  assert.ok(Math.abs(single.height - split.height) < 1e-10);
-  assert.ok(Math.abs(single.velocity - split.velocity) < 1e-10);
+  advanceGait(single, 0.9, 1);
+  for (let i = 0; i < 10; i++) advanceGait(split, 0.09, 0.1);
+  assert.ok(Math.abs(single.phase - split.phase) < 1e-10);
+  assert.ok(Math.abs(single.blend - split.blend) < 1e-10);
+  const before = gaitLegPose({ phase: 0.6 - 1e-6, blend: 1 }, 0);
+  const after = gaitLegPose({ phase: 0.6 + 1e-6, blend: 1 }, 0);
+  assert.ok(Math.abs(before.hip - after.hip) < 0.001);
+  assert.ok(Math.abs(before.knee - after.knee) < 0.001);
+  assert.ok(Math.abs(before.ankle - after.ankle) < 0.001);
 });
 
-test('five growth stages reach harvest after ten minutes, only after watering', () => {
+test('walking arms alternate opposite the legs and settle when stopped', () => {
+  const gait = { phase: 0, blend: 1 };
+  assert.ok(gaitArmSwing(gait, 0) < 0);
+  assert.ok(gaitArmSwing(gait, 1) > 0);
+  gait.phase = 0.5;
+  assert.ok(gaitArmSwing(gait, 0) > 0);
+  assert.ok(gaitArmSwing(gait, 1) < 0);
+  advanceGait(gait, 0, 1);
+  assert.ok(Math.abs(gaitArmSwing(gait, 0)) < 0.001);
+});
+
+test('growth pauses at hilling and irrigation checks until each plot is serviced', () => {
   const state = createState();
   state.phase = 5;
-  state.plots[0].stage = 5;
-  state.plots[1].stage = 4;
-  assert.deepEqual([0, 150, 300, 450, 600].map(growthStage), [0, 1, 2, 3, 4]);
-  advance(state, GROW_SECONDS - 1);
-  assert.equal(canWork(state, state.plots[0], 'shovel'), false);
-  assert.equal(state.plots[1].growth, 0);
-  advance(state, 1);
-  assert.equal(canWork(state, state.plots[0], 'shovel'), true);
-  completeWork(state, state.plots[0]);
-  assert.equal(state.harvested, 1);
+  state.plots.forEach(plot => { plot.stage = 5; });
+  assert.deepEqual([0, 0.25, 0.5, 0.75, 1].map(fraction => growthStage(fraction * GROW_SECONDS)), [0, 1, 2, 3, 4]);
+  assert.equal(canWork(state, state.plots[0], 'plow'), false);
+  advance(state, GROW_SECONDS * 2);
+  assert.equal(state.plots[0].growth, GROW_SECONDS / 4);
+  assert.equal(canWork(state, state.plots[0], 'plow'), true);
+  for (const plot of state.plots) completeWork(state, plot);
+  assert.equal(state.phase, 6);
+  assert.equal(canWork(state, state.plots[0], 'plow'), false);
+  advance(state, GROW_SECONDS * 2);
+  assert.equal(state.plots[0].growth, GROW_SECONDS / 2);
+  assert.equal(canStartIrrigation(state), true);
+  completeIrrigation(state);
+  assert.equal(state.phase, 7);
+  assert.equal(canWork(state, state.plots[0], 'sifter'), false);
+  advance(state, GROW_SECONDS);
+  assert.equal(canWork(state, state.plots[0], 'plow'), false);
+  assert.equal(canWork(state, state.plots[0], 'sifter'), true);
 });
 
 test('rest is night-only, advances to morning and speeds watered crops', () => {
   const state = createState();
-  state.plots[0].stage = 5;
+  state.plots[0].stage = 7;
   assert.equal(rest(state), false);
   state.minutes = 23 * 60;
   assert.equal(rest(state), true);
   assert.equal(state.minutes, 360);
   assert.equal(state.sol, 2);
-  assert.equal(state.plots[0].growth, 90);
+  assert.equal(state.plots[0].growth, REST_GROWTH_SECONDS);
   state.minutes = 120;
   assert.equal(rest(state), true);
   assert.equal(state.sol, 2);
 });
 
+test('the habitat door can be reached inside the movement boundary and rest is night-only', () => {
+  assert.equal(nearRestDoor({ x: 0, z: -7.7 }), true);
+  assert.equal(nearRestDoor({ x: 0, z: REST_DOOR.z + REST_DOOR.reach }), true);
+  assert.equal(nearRestDoor({ x: 0, z: REST_DOOR.z + REST_DOOR.reach + 0.01 }), false);
+  assert.equal(isNight(19 * 60 - 1), false);
+  assert.equal(isNight(19 * 60), true);
+  assert.equal(isNight(6 * 60), false);
+});
+
+test('the irrigation switch is reachable and watering requires the whole field to be ready', () => {
+  const state = createState();
+  assert.equal(nearWaterSwitch({ x: WATER_SWITCH.x + WATER_SWITCH.reach - 0.01, z: WATER_SWITCH.z }), true);
+  assert.equal(nearWaterSwitch({ x: WATER_SWITCH.x + WATER_SWITCH.reach + 0.01, z: WATER_SWITCH.z }), false);
+  assert.equal(canStartIrrigation(state), false);
+  state.phase = 4;
+  state.plots.forEach(plot => { plot.stage = 4; });
+  assert.equal(canWork(state, state.plots[0], 'auger'), false);
+  assert.equal(canStartIrrigation(state), true);
+  completeIrrigation(state);
+  assert.equal(state.phase, 5);
+  assert.throws(() => completeIrrigation(state), /not ready/);
+  state.phase = 6;
+  state.plots.forEach(plot => { plot.stage = 6; plot.growth = GROW_SECONDS / 2; });
+  state.plots[0].growth = 0;
+  assert.equal(canStartIrrigation(state), false);
+  assert.throws(() => completeIrrigation(state), /not ready/);
+  state.plots[0].growth = GROW_SECONDS / 2;
+  completeIrrigation(state);
+  assert.equal(state.phase, 7);
+  assert.ok(state.plots.every(plot => plot.stage === 7));
+});
+
+test('irrigation finishes plots already watered in older saves without repeating their work', () => {
+  const state = createState();
+  state.phase = 4;
+  state.plots.forEach(plot => { plot.stage = 4; });
+  state.plots[0].stage = 5; state.plots[0].growth = 2;
+  assert.equal(canStartIrrigation(state), true);
+  completeIrrigation(state);
+  assert.equal(state.phase, 5);
+  assert.equal(state.plots[0].growth, 2);
+  assert.ok(state.plots.every(plot => plot.stage === 5));
+});
+
 test('all objectives progress in order through a complete harvest', () => {
   const state = createState();
-  for (const tool of ['shovel', 'aerator', 'auger', 'shovel', 'shovel']) {
+  for (const tool of ['tiller', 'plow', 'auger', 'auger', 'auger', 'plow', 'plow', 'sifter']) {
     const phase = state.phase;
-    for (const plot of state.plots) {
+    if (phase >= 5) advance(state, GROW_SECONDS);
+    if (PHASES[phase].action === 'water') completeIrrigation(state);
+    else for (const plot of state.plots) {
       assert.equal(canWork(state, plot, tool), true);
       completeWork(state, plot);
     }
     assert.equal(state.phase, phase + 1);
   }
-  assert.equal(canWork(state, state.plots[0], 'shovel'), false);
-  advance(state, GROW_SECONDS);
-  for (const plot of state.plots) {
-    assert.equal(canWork(state, plot, 'shovel'), true);
-    completeWork(state, plot);
-  }
-  assert.equal(state.phase, 6);
+  assert.equal(state.phase, PHASES.length);
   assert.equal(state.harvested, PLOT_COUNT);
-  assert.equal(canWork(state, state.plots[0], 'shovel'), false);
+  assert.equal(state.totalHarvested, PLOT_COUNT);
+  assert.equal(canWork(state, state.plots[0], 'sifter'), false);
+});
+
+test('a completed harvest starts another cycle without losing time or cumulative harvest', () => {
+  const state = createState();
+  assert.throws(() => startNextCycle(state), /not complete/);
+  state.phase = PHASES.length;
+  state.harvested = PLOT_COUNT; state.totalHarvested = PLOT_COUNT * 2;
+  state.minutes = 1030; state.sol = 3;
+  state.plots.forEach(plot => { plot.stage = PHASES.length; plot.growth = GROW_SECONDS; });
+  startNextCycle(state);
+  assert.equal(state.phase, 0);
+  assert.equal(state.harvested, 0);
+  assert.equal(state.totalHarvested, PLOT_COUNT * 2);
+  assert.deepEqual([state.minutes, state.sol], [1030, 3]);
+  assert.ok(state.plots.every(plot => plot.stage === 0 && plot.growth === 0));
+  assert.equal(canWork(state, state.plots[0], 'tiller'), true);
+});
+
+test('parked operator and an active sprinkler countdown survive reload', () => {
+  const data = new Map();
+  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  const state = createState();
+  state.phase = 4; state.plots.forEach(plot => { plot.stage = 4; });
+  const position = { x: 0, z: 0, angle: 0 }, operator = { x: -7, z: -2, angle: 1 };
+  saveProgress(storage, state, position, 'auger', operator, 2.5);
+  const restored = loadProgress(storage);
+  assert.deepEqual(restored.operator, operator);
+  assert.equal(restored.irrigation, 2.5);
+  completeIrrigation(restored.state);
+  assert.equal(restored.state.phase, 5);
+  saveProgress(storage, state, position, 'auger', operator, 6);
+  assert.throws(() => loadProgress(storage), /invalid or incompatible/);
+});
+
+test('completed plots, growth, time, position and attachment survive a save and reload', () => {
+  const data = new Map();
+  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  assert.equal(loadProgress(storage), null);
+  const state = createState();
+  for (let phase = 0; phase < 5; phase++) for (const plot of state.plots) completeWork(state, plot);
+  advance(state, 4);
+  const position = { x: 1, z: -2, angle: 0.5 };
+  saveProgress(storage, state, position, 'plow');
+  const restored = loadProgress(storage);
+  assert.deepEqual(restored.state, state);
+  assert.deepEqual(restored.position, position);
+  assert.equal(restored.tool, 'plow');
+  assert.equal(canWork(restored.state, restored.state.plots[0], 'plow'), false);
+  advance(restored.state, GROW_SECONDS);
+  assert.equal(canWork(restored.state, restored.state.plots[0], 'plow'), true);
+});
+
+test('invalid saves and storage failures are reported rather than silently discarded', () => {
+  const storage = { getItem: () => '{broken', setItem: () => { throw new Error('Storage full'); } };
+  assert.throws(() => loadProgress(storage), SyntaxError);
+  assert.throws(() => saveProgress(storage, createState(), { x: 0, z: 0, angle: 0 }, 'tiller'), /Storage full/);
+  const invalid = JSON.stringify({ version: 1, state: createState(), position: { x: 100, z: 0, angle: 0 }, tool: 'tiller' });
+  assert.throws(() => loadProgress({ getItem: key => key === SAVE_KEY ? invalid : null }), /invalid or incompatible/);
+});
+
+test('older saves initialize their cumulative harvest without losing completed plots', () => {
+  const state = createState();
+  state.phase = PHASES.length - 1;
+  state.plots.forEach((plot, index) => {
+    plot.stage = index < 3 ? PHASES.length : PHASES.length - 1;
+    plot.growth = GROW_SECONDS;
+  });
+  state.harvested = 3;
+  delete state.totalHarvested;
+  const raw = JSON.stringify({ version: 1, state, position: { x: 0, z: 0, angle: 0 }, tool: 'sifter' });
+  const restored = loadProgress({ getItem: () => raw });
+  assert.equal(restored.state.totalHarvested, 3);
+  completeWork(restored.state, restored.state.plots[3]);
+  assert.equal(restored.state.totalHarvested, 4);
 });

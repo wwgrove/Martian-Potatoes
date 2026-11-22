@@ -1,9 +1,21 @@
 import * as THREE from '../vendor/three.module.js';
-import { createState, createGait, advanceGait, cameraRelativeMovement, digAlignment, alignmentPose, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, DIG_SECONDS, DIG_SPEED_MULTIPLIER, ASSUMED_MARS_DIG_SECONDS, STEP_LAUNCH_SPEED, advance, rest, isNight, growthStage, canWork, completeWork, phaseProgress } from './simulation.js';
+import { detachUpright } from './scene-helpers.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, completeWork, startNextCycle, phaseProgress } from './simulation.js';
 import { readGamepad, newlyPressed, joystickVector } from './controls.js';
+import { loadProgress, saveProgress } from './persistence.js';
 
 const $ = id => document.getElementById(id);
-const state = createState();
+let storage = null, saved = null, savingBlocked = false, saveFailed = false;
+try {
+  storage = window.localStorage;
+  saved = loadProgress(storage);
+} catch (error) {
+  savingBlocked = true;
+  console.error('Unable to load saved progress:', error);
+  $('save-status').textContent = 'SAVE UNAVAILABLE · CHECK SITE STORAGE';
+  $('save-status').classList.add('save-error');
+}
+const state = saved ? saved.state : createState();
 const gait = createGait();
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xc8916e);
@@ -36,7 +48,7 @@ const mat = {
   red: material(0xc76c49), dirt: material(0x76513b), soil: material(0x503d30),
   worked: material(0x3e3027), sand: material(0xb96f50), floor: material(0xa58e74),
   green: material(0x719765), leaf: material(0x67965e), leafLight: material(0x9abb7d),
-  cream: material(0xe7dcbf), light: new THREE.MeshBasicMaterial({ color: 0xffe5a7 }),
+  cream: material(0xe7dcbf), potato: material(0xc69b65), light: new THREE.MeshBasicMaterial({ color: 0xffe5a7 }),
   blue: material(0x799f9e), glass: new THREE.MeshBasicMaterial({ color: 0xb9d6c6, transparent: true, opacity: 0.095, side: THREE.DoubleSide, depthWrite: false })
 };
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -67,13 +79,23 @@ function rod(parent, m, a, b, radius) {
 
 // Mars, habitat shell, and a deliberately low-poly landscape.
 box(scene, mat.sand, 0, -0.5, 0, 120, 0.8, 120);
-const hills = material(0xa9674d);
+const hills = [material(0xa9674d), material(0x955c49), material(0xb57958), material(0x845447)];
 for (let i = 0; i < 17; i++) {
   const angle = i / 17 * Math.PI * 2;
-  const rock = new THREE.Mesh(new THREE.ConeGeometry(3 + i % 4, 3 + i % 3, 7), hills);
-  rock.position.set(Math.sin(angle) * 32, 0.2, Math.cos(angle) * 32);
-  rock.rotation.y = i; scene.add(rock);
+  const radius = 2.5 + (i * 7 % 5), height = 2 + (i * 11 % 6);
+  const geometry = i % 3 === 0 ? new THREE.CylinderGeometry(radius * 0.65, radius, height, 5) : new THREE.ConeGeometry(radius, height, 4 + i % 4);
+  const rock = new THREE.Mesh(geometry, hills[i % hills.length]);
+  const distance = 25 + i % 4 * 3;
+  rock.position.set(Math.sin(angle) * distance, height * 0.36 - 0.5, Math.cos(angle) * distance);
+  rock.rotation.y = i * 0.73; rock.scale.z = 0.6 + (i % 3) * 0.3; scene.add(rock);
 }
+const nightSky = new THREE.Group(); scene.add(nightSky);
+const starMaterial = new THREE.MeshBasicMaterial({ color: 0xe7ede6 });
+for (let i = 0; i < 60; i++) {
+  const angle = i * 2.39996, radius = 23 + i % 5 * 2;
+  sphere(nightSky, starMaterial, Math.sin(angle) * radius, 6 + (i * 13 % 15), Math.cos(angle) * radius, 0.055, 0.055, 0.055);
+}
+nightSky.visible = false;
 let randomSeed = 4301;
 function random() {
   randomSeed = (randomSeed * 1664525 + 1013904223) >>> 0;
@@ -120,6 +142,9 @@ for (const x of [-3, 3]) {
 box(scene, mat.suitDark, 0, 1.4, -10.6, 2.7, 2.8, 3);
 box(scene, mat.black, 0, 1.4, -9.05, 1.65, 2.2, 0.1);
 box(scene, mat.orange, 0, 2.8, -9, 2.4, 0.14, 0.16);
+const doorBeacon = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.66, 32), new THREE.MeshBasicMaterial({ color: 0x7cc9ff, side: THREE.DoubleSide }));
+doorBeacon.rotation.x = -Math.PI / 2; doorBeacon.position.set(REST_DOOR.x, 0.19, -7.5); scene.add(doorBeacon);
+doorBeacon.visible = false;
 // Utility cabinets, reservoir and lighting reinforce the life-support concept.
 for (const side of [-1, 1]) {
   box(scene, mat.suit, side * 8.7, 0.8, -2, 1.1, 1.6, 2);
@@ -129,17 +154,21 @@ for (const side of [-1, 1]) {
   rod(scene, mat.darkSteel, [side * 7.5, 4, -5.6], [side * 5.7, 4, -5.6], 0.06);
   box(scene, mat.light, side * 6.6, 3.95, -5.6, 1.8, 0.08, 0.25);
 }
+box(scene, mat.orange, WATER_SWITCH.x + 0.04, 1.15, WATER_SWITCH.z, 0.1, 0.28, 0.34);
+box(scene, mat.cream, WATER_SWITCH.x + 0.1, 1.15, WATER_SWITCH.z, 0.05, 0.14, 0.16);
+const switchBeacon = new THREE.Group(); switchBeacon.position.set(WATER_SWITCH.x + 0.5, 2.2, WATER_SWITCH.z); scene.add(switchBeacon);
+const switchDiamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), material(0x169bff, { emissive: 0x1265b8, emissiveIntensity: 0.9 }));
+switchBeacon.add(switchDiamond); switchBeacon.visible = false;
 
 const plots = [];
 const soilDetails = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x715741), PLOT_COUNT * 24);
-const plotMaterial = [mat.soil, mat.worked, material(0x49382b), material(0x594332), material(0x614831), material(0x4c3b2b), material(0x66503a)];
+const plotMaterial = [mat.soil, mat.worked, material(0x49382b), material(0x594332), material(0x614831), material(0x4c3b2b), material(0x493a2a), material(0x4c3b2b), material(0x66503a)];
 const furrows = new THREE.InstancedMesh(sphereGeo, material(0x79543b), PLOT_COUNT * 5);
-const aerationHoles = new THREE.InstancedMesh(new THREE.CircleGeometry(0.065, 8), material(0x241914), PLOT_COUNT * 16);
 const plantingHoles = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 20), material(0x211711), PLOT_COUNT);
 const plantedMounds = new THREE.InstancedMesh(sphereGeo, material(0x926b4b), PLOT_COUNT);
 const dampSoil = new THREE.InstancedMesh(new THREE.CircleGeometry(0.55, 24), material(0x302721), PLOT_COUNT);
 const waterGlints = new THREE.InstancedMesh(new THREE.CircleGeometry(0.055, 8), material(0x86a9a4), PLOT_COUNT * 3);
-scene.add(soilDetails, furrows, aerationHoles, plantingHoles, dampSoil, plantedMounds, waterGlints);
+scene.add(soilDetails, furrows, plantingHoles, dampSoil, plantedMounds, waterGlints);
 function setPlotDetail(mesh, index, x, y, z, sx, sy, sz, flat = false) {
   instanceTransform.position.set(x, y, z);
   instanceTransform.rotation.set(flat ? -Math.PI / 2 : 0, 0, 0);
@@ -149,20 +178,16 @@ function setPlotDetail(mesh, index, x, y, z, sx, sy, sz, flat = false) {
 function updatePlotDetails(visual, index, stage) {
   const { x, z } = visual;
   for (let i = 0; i < 5; i++) {
-    const visible = stage >= 1 && stage <= 3;
+    const visible = stage >= 2 && stage <= 3;
     setPlotDetail(furrows, index * 5 + i, x + (i - 2) * 0.3, 0.115, z, visible ? 0.075 : 0, 0.035, 0.75);
   }
-  for (let i = 0; i < 16; i++) {
-    const visible = stage === 2 || stage === 3;
-    setPlotDetail(aerationHoles, index * 16 + i, x + (i % 4 - 1.5) * 0.4, 0.15, z + (Math.floor(i / 4) - 1.5) * 0.4, visible ? 1 : 0, 1, 1, true);
-  }
   setPlotDetail(plantingHoles, index, x, 0.16, z, stage === 3 ? 1 : 0, 1, 1, true);
-  setPlotDetail(plantedMounds, index, x, 0.12, z, stage === 4 || stage === 5 ? 0.32 : 0, 0.1, 0.32);
-  setPlotDetail(dampSoil, index, x, 0.108, z, stage === 5 ? 1 : 0, 1, 1, true);
+  setPlotDetail(plantedMounds, index, x, 0.12, z, stage >= 4 && stage <= 7 ? (stage >= 6 ? 0.55 : 0.32) : 0, stage >= 6 ? 0.18 : 0.1, 0.4);
+  setPlotDetail(dampSoil, index, x, 0.108, z, stage >= 5 && stage <= 7 ? 1 : 0, 1, 1, true);
   for (let i = 0; i < 3; i++) {
-    setPlotDetail(waterGlints, index * 3 + i, x + [-0.38, 0.4, 0][i], 0.112, z + [0.2, 0.1, -0.42][i], stage === 5 ? 1 : 0, 0.55, 1, true);
+    setPlotDetail(waterGlints, index * 3 + i, x + [-0.38, 0.4, 0][i], 0.112, z + [0.2, 0.1, -0.42][i], stage >= 5 && stage <= 7 ? 1 : 0, 0.55, 1, true);
   }
-  for (const mesh of [furrows, aerationHoles, plantingHoles, plantedMounds, dampSoil, waterGlints]) mesh.instanceMatrix.needsUpdate = true;
+  for (const mesh of [furrows, plantingHoles, plantedMounds, dampSoil, waterGlints]) mesh.instanceMatrix.needsUpdate = true;
 }
 for (let row = 0; row < PLOT_ROWS; row++) {
   for (let col = 0; col < PLOT_COLUMNS; col++) {
@@ -192,12 +217,34 @@ for (let row = 0; row < PLOT_ROWS; row++) {
       const leaf = sphere(plant, n % 2 ? mat.leaf : mat.leafLight, Math.cos(angle) * 0.22, 0.25 + (n % 3) * 0.14, Math.sin(angle) * 0.22, 0.28, 0.07, 0.13);
       leaf.rotation.y = -angle; leaf.rotation.z = (n % 2 ? -1 : 1) * 0.18;
     }
+    const seed = sphere(group, mat.potato, 0, 0.33, 0, 0.12, 0.07, 0.09);
+    seed.visible = false;
     const ready = new THREE.Group(); ready.position.y = 1.25; group.add(ready);
     sphere(ready, mat.orange, 0, 0, 0, 0.19, 0.19, 0.19);
     rod(ready, mat.orange, [0, -0.34, 0], [0, -0.12, 0], 0.025);
     plant.visible = false; ready.visible = false;
-    plots.push({ group, soil, marker, selected, plant, ready, x, z, lastStage: -1, lastGrowth: -1 });
+    plots.push({ group, soil, marker, selected, plant, seed, ready, x, z, lastStage: -1, lastGrowth: -1 });
   }
+}
+
+const dropletsPerRow = 36;
+const sprayGeometry = new THREE.BufferGeometry();
+sprayGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PLOT_ROWS * dropletsPerRow * 3), 3));
+const spray = new THREE.Points(sprayGeometry, new THREE.PointsMaterial({ color: 0xb5e7f2, size: 0.12, transparent: true, opacity: 0.85, depthWrite: false }));
+spray.visible = false; scene.add(spray);
+for (let row = 0; row < PLOT_ROWS; row++) {
+  const z = (row - (PLOT_ROWS - 1) / 2) * 2.1 - 0.3;
+  cylinder(scene, mat.darkSteel, -5.1, 0.3, z, 0.055, 0.55);
+  sphere(scene, mat.orange, -5.1, 0.59, z, 0.12, 0.08, 0.12);
+}
+function updateSpray(time) {
+  const positions = sprayGeometry.attributes.position;
+  for (let row = 0; row < PLOT_ROWS; row++) for (let i = 0; i < dropletsPerRow; i++) {
+    const p = (i / dropletsPerRow + time * 0.7) % 1;
+    const z = (row - (PLOT_ROWS - 1) / 2) * 2.1 - 0.3 + Math.sin(i * 2.4) * 0.45;
+    positions.setXYZ(row * dropletsPerRow + i, -5.1 + p * 9.6, 0.6 + Math.sin(p * Math.PI) * 1.6, z);
+  }
+  positions.needsUpdate = true;
 }
 
 const digMarker = new THREE.Group();
@@ -226,7 +273,7 @@ for (const [x, z, width, length] of [[-0.5, -0.85, 0.28, 0.75], [0.5, -0.85, 0.2
   shadow.rotation.x = -Math.PI / 2; shadow.position.set(x, 0.055, z); shadow.scale.set(width, length, 1); rig.add(shadow);
 }
 const MACHINE_SCALE = 0.82, MACHINE_OFFSET = 0.85, MOUNT_OFFSET = 1.05;
-const TOOL_OFFSET = MACHINE_OFFSET + MACHINE_SCALE * MOUNT_OFFSET, MOVEMENT_RADIUS = 7.7;
+const TOOL_OFFSET = MACHINE_OFFSET + MACHINE_SCALE * MOUNT_OFFSET;
 const machine = new THREE.Group(); machine.position.z = -MACHINE_OFFSET; machine.scale.setScalar(MACHINE_SCALE); rig.add(machine);
 const treads = [], wheels = [];
 const beltPath = [
@@ -307,6 +354,16 @@ for (const x of [-trackSpacing, trackSpacing]) {
   }
 }
 box(machine, mat.black, 0, 0.24, 0, 0.84, 0.3, 1.5);
+const seedBin = new THREE.Group(); seedBin.position.set(0, 0.28, 0.2); machine.add(seedBin);
+box(seedBin, mat.darkSteel, 0, 0, 0, 0.68, 0.08, 0.9);
+for (const side of [-1, 1]) {
+  box(seedBin, mat.suitDark, side * 0.32, 0.18, 0, 0.06, 0.36, 0.9);
+  box(seedBin, mat.suitDark, 0, 0.18, side * 0.42, 0.68, 0.36, 0.06);
+}
+for (const [x, z] of [[-0.18, -0.22], [0.09, -0.24], [-0.12, 0.05], [0.17, 0.04], [-0.16, 0.3], [0.13, 0.29]]) {
+  const seed = sphere(seedBin, mat.potato, x, 0.32, z, 0.115, 0.085, 0.14);
+  seed.rotation.y = x * 3;
+}
 
 // The closed case follows the rising front edge of the triangular tracks.
 const compartment = new THREE.Group(); compartment.position.set(0, 0.84, 0.2); compartment.rotation.x = -Math.atan(0.75 / 1.32); machine.add(compartment);
@@ -326,12 +383,17 @@ function tShapeMesh(m, depth, inset = 0) {
 }
 compartment.add(tShapeMesh(mat.orangeDark, 0.17));
 const tray = tShapeMesh(mat.black, 0.025, 0.08); tray.position.y = 0.18; compartment.add(tray);
-const lidPivot = new THREE.Group(); lidPivot.position.set(-0.36, 0.21, 0); compartment.add(lidPivot);
+const caseOutline = [[-0.34, -1.03], [0.34, -1.03], [0.34, 0.27], [0.57, 0.27], [0.57, 0.68], [0.48, 0.78], [-0.48, 0.78], [-0.57, 0.68], [-0.57, 0.27], [-0.34, 0.27]];
+for (let i = 0; i < caseOutline.length; i++) {
+  const [x1, z1] = caseOutline[i], [x2, z2] = caseOutline[(i + 1) % caseOutline.length];
+  box(compartment, mat.orangeDark, (x1 + x2) / 2, 0.33, (z1 + z2) / 2, Math.hypot(x2 - x1, z2 - z1), 0.32, 0.05, -Math.atan2(z2 - z1, x2 - x1));
+}
+const lidPivot = new THREE.Group(); lidPivot.position.set(-0.36, 0.49, 0); compartment.add(lidPivot);
 const lid = tShapeMesh(mat.orange, 0.095); lid.position.x = 0.36; lidPivot.add(lid);
 const lidPanel = tShapeMesh(mat.orangeDark, 0.01, 0.07); lidPanel.position.set(0.36, 0.1, 0); lidPivot.add(lidPanel);
 const lidFace = tShapeMesh(mat.orange, 0.01, 0.095); lidFace.position.set(0.36, 0.112, 0); lidPivot.add(lidFace);
-for (const z of [-0.42, 0.42]) cylinder(compartment, mat.darkSteel, -0.38, 0.2, z, 0.045, 0.14);
-box(compartment, mat.darkSteel, 0.55, 0.24, 0.56, 0.08, 0.06, 0.18);
+for (const z of [-0.42, 0.42]) cylinder(compartment, mat.darkSteel, -0.38, 0.49, z, 0.045, 0.14);
+box(compartment, mat.cream, 0.55, 0.5, 0.56, 0.1, 0.08, 0.2);
 rod(machine, mat.black, [0, 1.41, 0.78], [0, 2.1, 1.95], 0.055);
 rod(machine, mat.darkSteel, [0, 1.41, 0.78], [0, 1.52, 0.97], 0.074);
 rod(machine, mat.black, [-0.42, 2.1, 1.95], [0.42, 2.1, 1.95], 0.065);
@@ -341,21 +403,29 @@ rod(machine, mat.black, [-0.3, 1.94, 1.83], [0.3, 1.94, 1.83], 0.045);
 const attachmentPivot = new THREE.Group(); attachmentPivot.position.set(0, 0.34, -0.7); machine.add(attachmentPivot);
 const pivotPin = cylinder(machine, mat.orangeDark, 0, 0.34, -0.7, 0.1, 0.28);
 pivotPin.rotation.z = Math.PI / 2;
-rod(attachmentPivot, mat.darkSteel, [0, 0, 0], [0, 0.06, -0.28], 0.08);
-sphere(attachmentPivot, mat.darkSteel, 0, 0.06, -0.28, 0.11, 0.09, 0.09);
+const toolMountPosition = new THREE.Vector3(0, 0.12 - attachmentPivot.position.y, -MOUNT_OFFSET - attachmentPivot.position.z);
+const toolCoupler = new THREE.Vector3(0, 0.44, 0.25);
+const couplerPosition = toolMountPosition.clone().add(toolCoupler);
+rod(attachmentPivot, mat.darkSteel, [0, 0, 0], couplerPosition.toArray(), 0.085);
+sphere(attachmentPivot, mat.orangeDark, couplerPosition.x, couplerPosition.y, couplerPosition.z, 0.12, 0.12, 0.12);
 function makeTool(type, scale = 1) {
   const g = new THREE.Group(); g.scale.setScalar(scale);
-  if (type === 'shovel') {
-    rod(g, mat.darkSteel, [0, 0.27, 0], [0, 0.22, 0.35], 0.055);
-    const shape = new THREE.Shape();
-    shape.moveTo(-0.3, 0.42); shape.lineTo(0.3, 0.42);
-    shape.quadraticCurveTo(0.28, 0.12, 0, -0.12);
-    shape.quadraticCurveTo(-0.28, 0.12, -0.3, 0.42);
-    const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.055, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 2 }), mat.steel);
-    blade.position.z = -0.05; blade.rotation.x = -0.25; g.add(blade);
-    rod(g, mat.darkSteel, [0, 0.16, -0.08], [0, 0.45, 0.02], 0.035);
+  const anchors = { tiller: [0, 0.65, 0.25], plow: [0, 0.23, 0.08], auger: [0, 0.78, 0], sifter: [0, 0.18, 0.32] };
+  rod(g, mat.darkSteel, toolCoupler.toArray(), anchors[type], 0.075);
+  sphere(g, mat.orange, toolCoupler.x, toolCoupler.y, toolCoupler.z, 0.1, 0.1, 0.1);
+  if (type === 'plow') {
+    g.userData.wings = [];
+    for (const side of [-1, 1]) {
+      const wing = box(g, mat.steel, side * 0.24, 0.16, 0.08, 0.58, 0.07, 0.34, side * 0.65);
+      wing.rotation.z = side * 0.18;
+      g.userData.wings.push(wing);
+      rod(g, mat.darkSteel, [0, 0.24, -0.14], [side * 0.47, 0.23, 0.28], 0.025);
+    }
+    sphere(g, mat.orangeDark, 0, 0.24, -0.14, 0.055, 0.055, 0.055);
   } else if (type === 'auger') {
-    rod(g, mat.darkSteel, [0, 0.05, 0], [0, 0.85, 0], 0.055);
+    const auger = new THREE.Group(); g.add(auger);
+    rod(auger, mat.darkSteel, [0, 0.05, 0], [0, 0.85, 0], 0.055);
+    cylinder(g, mat.darkSteel, 0, 0.78, 0, 0.11, 0.13);
     const vertices = [], indices = [];
     for (let i = 0; i <= 96; i++) {
       const progress = i / 96, angle = progress * Math.PI * 8, y = 0.08 + progress * 0.72;
@@ -368,37 +438,52 @@ function makeTool(type, scale = 1) {
     const flight = new THREE.BufferGeometry();
     flight.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     flight.setIndex(indices); flight.computeVertexNormals();
-    g.add(new THREE.Mesh(flight, material(0xaab5ad, { side: THREE.DoubleSide, metalness: 0.25 })));
-  } else {
+    auger.add(new THREE.Mesh(flight, material(0xaab5ad, { side: THREE.DoubleSide, metalness: 0.25 })));
+    g.userData.auger = auger;
+  } else if (type === 'tiller') {
     const rollerGroup = new THREE.Group(); rollerGroup.position.y = 0.25; g.add(rollerGroup);
     const roller = cylinder(rollerGroup, mat.darkSteel, 0, 0, 0, 0.18, 0.8);
     roller.rotation.z = Math.PI / 2;
     for (let i = -2; i <= 2; i++) for (let j = 0; j < 5; j++) {
       const a = j * Math.PI * 2 / 5;
-      rod(rollerGroup, mat.steel, [i * 0.15, Math.cos(a) * 0.15, Math.sin(a) * 0.15], [i * 0.15, Math.cos(a) * 0.3, Math.sin(a) * 0.3], 0.035);
+      const y = Math.cos(a), z = Math.sin(a);
+      rod(rollerGroup, mat.steel, [i * 0.15, y * 0.16, z * 0.16], [i * 0.15, y * 0.29, z * 0.29], 0.03);
+      rod(rollerGroup, mat.steel, [i * 0.15, y * 0.29, z * 0.29], [i * 0.15 + 0.09, y * 0.29 - z * 0.06, z * 0.29 + y * 0.06], 0.03);
     }
     rod(g, mat.darkSteel, [-0.42, 0.25, 0], [-0.42, 0.65, 0.25], 0.035);
     rod(g, mat.darkSteel, [0.42, 0.25, 0], [0.42, 0.65, 0.25], 0.035);
     rod(g, mat.darkSteel, [-0.42, 0.65, 0.25], [0.42, 0.65, 0.25], 0.035);
     g.userData.roller = rollerGroup;
+  } else if (type === 'sifter') {
+    const basket = new THREE.Group(); g.add(basket);
+    box(basket, mat.darkSteel, 0, 0.18, 0.32, 0.9, 0.12, 0.14);
+    for (let i = -4; i <= 4; i++) {
+      box(basket, mat.steel, i * 0.1, 0.12, 0, 0.055, 0.06, 0.68);
+    }
+    for (const side of [-1, 1]) {
+      box(basket, mat.darkSteel, side * 0.46, 0.2, 0, 0.08, 0.15, 0.7);
+      sphere(basket, mat.orangeDark, side * 0.46, 0.22, 0.3, 0.07, 0.07, 0.07);
+    }
+    g.userData.basket = basket;
   }
   return g;
 }
+const toolTypes = TOOL_TYPES;
 const mounted = {};
-for (const type of ['shovel', 'aerator', 'auger']) {
-  const tool = makeTool(type); tool.position.set(0, 0.12 - attachmentPivot.position.y, -MOUNT_OFFSET - attachmentPivot.position.z); attachmentPivot.add(tool);
-  tool.visible = type === 'shovel'; mounted[type] = tool;
+for (const type of toolTypes) {
+  const tool = makeTool(type); tool.position.copy(toolMountPosition); attachmentPivot.add(tool);
+  tool.visible = type === (saved ? saved.tool : 'tiller'); mounted[type] = tool;
 }
 const stored = {};
-for (const type of ['shovel', 'aerator', 'auger']) {
-  const tool = makeTool(type, 0.4);
-  if (type === 'aerator') tool.position.set(0, 0.26, 0.36);
-  else tool.position.set(type === 'auger' ? -0.16 : 0.14, 0.26, -0.55);
+const storageSlots = { tiller: 0.32, plow: -0.55, auger: -0.91, sifter: -0.27 };
+for (const type of toolTypes) {
+  const tool = makeTool(type, 0.32);
+  tool.position.set(0, 0.34, storageSlots[type]);
   tool.rotation.x = Math.PI / 2; compartment.add(tool);
   tool.visible = false; stored[type] = tool;
 }
 const carried = {};
-for (const type of ['shovel', 'aerator', 'auger']) {
+for (const type of toolTypes) {
   carried[type] = makeTool(type, 0.7);
   carried[type].visible = false;
   machine.add(carried[type]);
@@ -429,6 +514,12 @@ sphere(helmet, mat.blue, -0.12, 2.12, -0.395, 0.075, 0.035, 0.008);
 for (const side of [-1, 1]) {
   sphere(helmet, mat.orange, side * 0.34, 2, 0, 0.045, 0.065, 0.07);
 }
+const upperBody = new THREE.Group(); upperBody.position.y = 0.96;
+for (const part of [...astronaut.children]) {
+  part.position.y -= upperBody.position.y;
+  upperBody.add(part);
+}
+astronaut.add(upperBody);
 function makeLeg(side) {
   const hip = new THREE.Group(); hip.position.set(side * 0.2, 0.96, 0); astronaut.add(hip);
   sphere(hip, mat.suitDark, 0, 0, 0, 0.16, 0.16, 0.16);
@@ -438,36 +529,98 @@ function makeLeg(side) {
   sphere(knee, mat.white, 0, 0, -0.105, 0.12, 0.1, 0.07);
   rod(knee, mat.suit, [0, -0.04, 0], [0, -0.36, 0], 0.12);
   sphere(knee, mat.suitDark, 0, -0.35, 0, 0.13, 0.07, 0.13);
-  sphere(knee, mat.black, 0, -0.44, -0.085, 0.16, 0.1, 0.245);
-  box(knee, mat.darkSteel, 0, -0.51, -0.09, 0.29, 0.07, 0.4);
-  return { hip, knee };
+  const foot = new THREE.Group(); foot.position.y = -0.35; knee.add(foot);
+  sphere(foot, mat.black, 0, -0.09, -0.085, 0.16, 0.1, 0.245);
+  return { hip, knee, foot };
 }
 const legs = [makeLeg(-1), makeLeg(1)];
 const arms = [];
 for (const side of [-1, 1]) {
-  const arm = new THREE.Group(); arm.position.set(side * 0.37, 1.53, 0); astronaut.add(arm);
+  const arm = new THREE.Group(); arm.position.set(side * 0.37, 1.53 - upperBody.position.y, 0); upperBody.add(arm);
   sphere(arm, mat.white, 0, 0, 0, 0.16, 0.16, 0.16);
   rod(arm, mat.suit, [0, -0.03, 0], [side * 0.09, -0.2, -0.22], 0.115);
   sphere(arm, mat.suitDark, side * 0.09, -0.2, -0.22, 0.12, 0.12, 0.12);
   sphere(arm, mat.white, side * 0.13, -0.2, -0.22, 0.065, 0.09, 0.09);
   rod(arm, mat.suit, [side * 0.09, -0.2, -0.22], [side * -0.03, 0.16, -0.3], 0.1);
-  sphere(arm, mat.darkSteel, side * -0.03, 0.16, -0.3, 0.105, 0.07, 0.105);
-  sphere(arm, mat.white, side * -0.03, 0.19, -0.3, 0.11, 0.1, 0.12);
-  arms.push(arm);
+  const hand = new THREE.Group(); hand.position.set(side * -0.03, 0.19, -0.3); arm.add(hand);
+  sphere(hand, mat.darkSteel, 0, -0.03, 0, 0.105, 0.07, 0.105);
+  sphere(hand, mat.white, 0, 0, 0, 0.11, 0.1, 0.12);
+  const walkingArm = new THREE.Group(); walkingArm.position.copy(arm.position); upperBody.add(walkingArm);
+  sphere(walkingArm, mat.white, 0, 0, 0, 0.16, 0.16, 0.16);
+  rod(walkingArm, mat.suit, [0, -0.04, 0], [side * 0.06, -0.32, 0], 0.115);
+  sphere(walkingArm, mat.suitDark, side * 0.06, -0.32, 0, 0.12, 0.12, 0.12);
+  rod(walkingArm, mat.suit, [side * 0.06, -0.32, 0], [side * 0.08, -0.58, -0.05], 0.1);
+  sphere(walkingArm, mat.white, side * 0.08, -0.6, -0.05, 0.11, 0.1, 0.12);
+  walkingArm.visible = false;
+  arms.push({ arm, hand, walkingArm });
 }
-rig.position.set(0, 0.05, 5.8);
+const carriedSeed = sphere(rig, mat.potato, 0, 0, 0, 0.12, 0.08, 0.1); carriedSeed.visible = false;
+rig.position.set(saved ? saved.position.x : 0, 0.05, saved ? saved.position.z : 5);
+if (saved) rig.rotation.y = saved.position.angle;
+const lastSafePosition = { x: rig.position.x, z: rig.position.z, angle: rig.rotation.y };
+let parked = Boolean(saved && saved.operator);
+if (parked) {
+  scene.attach(astronaut);
+  astronaut.position.set(saved.operator.x, 0.05, saved.operator.z);
+  astronaut.rotation.set(0, saved.operator.angle, 0);
+}
+let irrigationRemaining = saved && saved.irrigation ? saved.irrigation : 0;
 
-let activeTool = 'shovel', switching = null, started = false, currentTarget = null, pinnedTarget = null;
-let work = 0, workTarget = null, snap = null, toastTimer = 0, elapsed = 0;
+let activeTool = saved ? saved.tool : 'tiller', switching = null, started = false, currentTarget = null, pinnedTarget = null;
+let work = 0, workTarget = null, workPhase = null, workRoute = null, snap = null, toastTimer = 0, elapsed = 0;
+let plantingActive = false, plantingPlot = null, plantReturn = null, plantBend = 0, plantPose = null;
+let saveTimer = 0;
 let restCutscene = null, restScene = null;
+let previousWorking = false, previousNight = false;
 const treadDistance = [0, 0];
 const keys = new Set();
 let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false;
 let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null, touchCamera = null;
 let cameraAngle = 0.38, cameraPitch = 0.62, cameraDistance = 11;
+let previousCameraAngle = cameraAngle;
+const cameraPan = { x: 0, z: 0 };
 let dragging = false, lastX = 0, lastY = 0;
 const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const targetPoint = new THREE.Vector3(), cameraPoint = new THREE.Vector3(), viewDirection = new THREE.Vector3();
+const interactionPosition = new THREE.Vector3(), interactionProjection = new THREE.Vector3(), astronautWorld = new THREE.Vector3();
+const seedHandPosition = new THREE.Vector3(), seedGroundPosition = new THREE.Vector3(0, 0.12, -TOOL_OFFSET);
+
+function stopPlanting(returnToHandle) {
+  if (!plantingActive) return;
+  carriedSeed.visible = false;
+  if (plantingPlot !== null) plots[plantingPlot].seed.visible = false;
+  if (returnToHandle) {
+    plantReturn = { x: astronaut.position.x, z: astronaut.position.z, angle: astronaut.rotation.y, bend: plantBend, time: 0 };
+  } else {
+    astronaut.position.x = 0; astronaut.position.z = 1.05; astronaut.rotation.y = 0; plantBend = 0;
+  }
+  plantingActive = false; plantingPlot = null; plantPose = null;
+}
+
+function persistProgress() {
+  if (!started || savingBlocked) return;
+  try {
+    rememberSafePosition();
+    const operator = parked ? { x: astronaut.position.x, z: astronaut.position.z, angle: astronaut.rotation.y } : null;
+    saveProgress(storage, state, lastSafePosition, activeTool, operator, irrigationRemaining || null);
+    $('save-status').textContent = 'PROGRESS SAVED ON THIS DEVICE';
+    $('save-status').classList.remove('save-error');
+    saveFailed = false;
+  } catch (error) {
+    if (!saveFailed) console.error('Unable to save progress:', error);
+    saveFailed = true;
+    $('save-status').textContent = 'SAVE FAILED · CHECK SITE STORAGE';
+    $('save-status').classList.add('save-error');
+  }
+}
+
+function rememberSafePosition() {
+  if (Math.hypot(rig.position.x, rig.position.z) <= MOVEMENT_RADIUS) {
+    lastSafePosition.x = rig.position.x;
+    lastSafePosition.z = rig.position.z;
+    lastSafePosition.angle = rig.rotation.y;
+  }
+}
 
 function createRestScene() {
   const interior = new THREE.Scene(); interior.background = new THREE.Color(0x24352f);
@@ -508,16 +661,17 @@ function createRestScene() {
   }
   const suit = astronaut.clone(true); suit.position.set(0, 0, 0); suit.rotation.set(0, 0, 0); interior.add(suit);
   const suitHelmet = suit.getObjectByName('helmet');
+  const suitHelmetY = suitHelmet.position.y;
   sphere(suit, skin, 0, 1.99, 0, 0.22, 0.27, 0.21);
   sphere(suit, hair, 0, 2.18, 0.02, 0.22, 0.09, 0.21);
   for (const x of [-0.07, 0.07]) sphere(suit, mat.black, x, 2.02, -0.19, 0.022, 0.025, 0.015);
-  return { interior, view, door, person, restLegs, restArms, suit, suitHelmet };
+  return { interior, view, door, person, restLegs, restArms, suit, suitHelmet, suitHelmetY };
 }
 
 function updateRestCutscene(dt) {
   const sequence = restCutscene;
   sequence.time = Math.min(5, sequence.time + dt);
-  const t = sequence.time, { interior, view, door, person, restLegs, restArms, suit, suitHelmet } = restScene;
+  const t = sequence.time, { interior, view, door, person, restLegs, restArms, suit, suitHelmet, suitHelmetY } = restScene;
   const ease = (value, start, end) => THREE.MathUtils.smoothstep(value, start, end);
   person.visible = t < 3.9; suit.visible = t >= 3.9;
   person.rotation.set(0, 0, 0);
@@ -547,7 +701,7 @@ function updateRestCutscene(dt) {
     suit.position.set(-1.8, 0, -2.3); suit.rotation.y = Math.PI;
     const dressed = ease(t, 3.9, 4.25);
     suit.scale.setScalar(0.88 + dressed * 0.12);
-    suitHelmet.position.y = (1 - dressed) * 0.55;
+    suitHelmet.position.y = suitHelmetY + (1 - dressed) * 0.55;
   }
   let fade = 0;
   if (t >= 1.55 && t < 1.85) fade = (t - 1.55) / 0.3;
@@ -564,7 +718,7 @@ function updateRestCutscene(dt) {
   }
   if (t >= 5) {
     restCutscene = null; $('rest-cutscene').hidden = true; $('app').classList.remove('resting');
-    message('Rest complete. Crop growth advanced by 90 seconds.');
+    message(`Rest complete. Crop growth advanced by up to ${REST_GROWTH_SECONDS} seconds.`);
     renderer.domElement.focus();
   }
 }
@@ -573,10 +727,21 @@ function message(text) {
   $('toast').textContent = text; $('toast').classList.add('show'); toastTimer = 3.5;
 }
 function selectTool(type) {
-  if (!started || switching || restCutscene || activeTool === type) return;
+  if (!started || switching || restCutscene) return;
+  if (parked) { message('Pick up the machine before changing attachments.'); return; }
+  if (plantingActive || plantReturn) { message('Finish planting or release Work before changing attachments.'); return; }
+  const nextCycle = state.phase === PHASES.length && type === 'tiller';
+  if (activeTool === type && !nextCycle) return;
   setScreenMove(null); setScreenWork(false);
+  if (nextCycle) {
+    startNextCycle(state);
+    currentTarget = null; pinnedTarget = null;
+    work = 0; workTarget = null; workPhase = null; workRoute = null; snap = null;
+    persistProgress();
+  }
+  if (activeTool === type) { message('The next growing cycle begins.'); return; }
   switching = { from: activeTool, to: type, time: 0 };
-  work = 0; workTarget = null; snap = null;
+  work = 0; workTarget = null; workPhase = null; workRoute = null; snap = null;
   message(`Changing attachment: ${activeTool} → ${type}`);
 }
 function moveCarriedTool(type, progress) {
@@ -586,12 +751,14 @@ function moveCarriedTool(type, progress) {
   const mountedPosition = mounted[type].position.clone().applyMatrix4(attachmentPivot.matrix);
   tool.position.lerpVectors(mountedPosition, storagePosition, progress);
   tool.position.y += Math.sin(progress * Math.PI) * 0.3;
-  tool.rotation.set(THREE.MathUtils.lerp(0, Math.PI / 2 + compartment.rotation.x, progress), 0, 0);
-  tool.scale.setScalar(THREE.MathUtils.lerp(1, 0.4, progress));
+  const mountedRotation = attachmentPivot.quaternion.clone().multiply(mounted[type].quaternion);
+  const storedRotation = compartment.quaternion.clone().multiply(stored[type].quaternion);
+  tool.quaternion.slerpQuaternions(mountedRotation, storedRotation, progress);
+  tool.scale.setScalar(THREE.MathUtils.lerp(1, stored[type].scale.x, progress));
 }
 function updateSwitch(dt) {
   if (!switching) return;
-  switching.time += dt;
+  switching.time += dt * 1.6;
   const t = switching.time;
   // Walk to the front, open the lid, exchange the attachment, and return.
   const walk = t < 0.8 ? t / 0.8 : t < 2.7 ? 1 : Math.max(0, 1 - (t - 2.7) / 0.8);
@@ -616,8 +783,9 @@ function updateSwitch(dt) {
     mounted[switching.to].visible = true;
     activeTool = switching.to;
     updateToolUI();
+    persistProgress();
   }
-  for (const type of ['shovel', 'aerator', 'auger']) {
+  for (const type of toolTypes) {
     const inCase = type === switching.from ? t >= 1.8 : type === switching.to ? t < 1.8 : true;
     stored[type].visible = lidPivot.rotation.z > 0.4 && inCase;
   }
@@ -628,6 +796,8 @@ function updateToolUI() {
     const selected = button.dataset.tool === activeTool;
     button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
   });
+  $('machine-toggle').textContent = parked ? 'PICK UP TOOL' : 'PARK TOOL';
+  $('machine-toggle').setAttribute('aria-pressed', String(parked));
 }
 function updatePlots() {
   plots.forEach((visual, i) => {
@@ -636,16 +806,17 @@ function updatePlots() {
       visual.soil.material = plotMaterial[plot.stage];
       if (visual.lastStage !== plot.stage) updatePlotDetails(visual, i, plot.stage);
       visual.marker.visible = plot.stage < 3;
-      visual.plant.visible = plot.stage === 5 && stage > 0;
+      visual.plant.visible = plot.stage >= 5 && plot.stage <= 7 && stage > 0;
       visual.plant.scale.setScalar([0.1, 0.35, 0.62, 0.85, 1.05][stage]);
-      visual.ready.visible = plot.stage === 5 && stage === 4;
+      visual.ready.visible = plot.stage === 7 && stage === 4;
       visual.lastStage = plot.stage; visual.lastGrowth = stage;
     }
     visual.selected.visible = currentTarget === i;
     visual.selected.material.color.setHex(canWork(state, plot, activeTool) ? 0xffd69a : 0xe07862);
     if (visual.ready.visible) visual.ready.position.y = 1.25 + Math.sin(elapsed * 3 + i) * 0.08;
   });
-  digMarker.visible = started && state.phase === 0 && currentTarget !== null && state.plots[currentTarget].stage === 0;
+  const phase = PHASES[state.phase];
+  digMarker.visible = started && Boolean(phase) && currentTarget !== null && canWork(state, state.plots[currentTarget], phase.tool || activeTool);
   digMarkerStem.visible = digMarker.visible;
   if (digMarker.visible) {
     const target = plots[currentTarget];
@@ -655,23 +826,39 @@ function updatePlots() {
     digMarkerStem.scale.y = digMarker.position.y - 0.53;
   }
 }
+const operationInsights = [
+  { title: 'Rotary tiller · loosen', text: 'Curved tines break up compacted soil so roots and tubers have room to grow.' },
+  { title: 'Hilling plow · furrow', text: 'The plow opens a trench, giving seed potatoes a consistent planting row.' },
+  { title: 'Mixing auger · bore', text: 'The spiral drills planting holes with little downward force in low gravity.' },
+  { title: 'Planting by hand', text: 'Placing each seed potato gently in a prepared hole helps protect it from damage.' },
+  { title: 'Sprinklers · establish', text: 'Water moistens the planted soil, helping the seed potatoes begin growing.' },
+  { title: 'Hilling plow · mound', text: 'Soil mounded over growing tubers protects them from light and greening.' },
+  { title: 'Sprinklers · tuber growth', text: 'Consistent moisture during tuber development helps the crop grow evenly.' },
+  { title: 'Vibratory lifter · harvest', text: 'The blade lifts from beneath while soil sifts away, reducing damage to potatoes.' }
+];
+let displayedInsight = -1;
 function updateUI() {
   const phase = PHASES[state.phase], done = phaseProgress(state);
   $('objective-count').textContent = `${String(done).padStart(2, '0')} / ${PLOT_COUNT}`;
   $('objective-progress').style.width = `${done / PLOT_COUNT * 100}%`;
-  $('objective').textContent = phase ? phase.title : 'The first harvest is complete';
-  $('phase-number').textContent = phase ? `PHASE 0${state.phase + 1} / 06` : 'MISSION COMPLETE';
+  $('objective').textContent = phase ? phase.title : 'Harvest complete';
+  $('harvest-total').textContent = `POTATOES HARVESTED · ${state.totalHarvested}`;
+  $('phase-number').textContent = phase ? `PHASE 0${state.phase + 1} / 0${PHASES.length}` : 'MISSION COMPLETE';
   $('phase-name').textContent = phase ? phase.name : 'WELL DONE';
-  $('dig-speed').hidden = state.phase !== 0;
-  $('dig-speed-note').hidden = state.phase !== 0;
-  $('dig-speed-label').textContent = `${DIG_SPEED_MULTIPLIER}× DIGGING SPEED`;
-  $('dig-speed-note').textContent = `*Illustrative ${ASSUMED_MARS_DIG_SECONDS}s/plot baseline; not measured.`;
-  let instruction = 'Your crop is harvested. Thank you for exploring the concept.';
+  let instruction = parked ? 'Pick up the machine, then select the rotary tiller for the next crop.' : 'Select the rotary tiller to begin the next crop.';
   if (phase) {
     if (switching) instruction = 'The astronaut is exchanging attachments.';
+    else if (phase.action === 'water') {
+      if (irrigationRemaining > 0) instruction = `Sprinklers running · ${Math.ceil(irrigationRemaining)} seconds remaining.`;
+      else if (!parked) instruction = 'Park the machine (F), then walk to the blue marker at the white cabinet.';
+      else if (!nearWaterSwitch(astronaut.position)) instruction = 'Walk to the blue marker at the white irrigation cabinet.';
+      else if (!canStartIrrigation(state)) instruction = 'Wait for every plot to reach the irrigation checkpoint.';
+      else instruction = 'Press Space or Work at the cabinet switch to start the sprinklers.';
+    }
+    else if (parked) instruction = 'Return to the machine handle and press F or Pick up tool.';
     else if (phase.tool && phase.tool !== activeTool) instruction = `Select the ${phase.tool} attachment.`;
-    else if (state.phase === 0) instruction = `Move to a marked plot and work to dig. Each plot takes ${DIG_SECONDS} seconds.`;
-    else if (state.phase === 5) instruction = 'Wait for orange harvest markers. Rest at night to accelerate growth.';
+    else if (state.phase === 5) instruction = 'Hill each plot when its blue marker appears as the shoots grow.';
+    else if (state.phase === 7) instruction = 'Harvest blue-marked mature crops. Rest at night to accelerate growth.';
     else instruction = `Move to a marked plot and work to ${phase.action}.`;
   }
   $('instruction').textContent = instruction;
@@ -680,28 +867,89 @@ function updateUI() {
   $('day-label').textContent = `SOL ${String(state.sol).padStart(2, '0')} · ${isNight(state.minutes) ? 'NIGHTTIME' : 'DAYTIME'}`;
   $('mobile-clock').textContent = `SOL ${String(state.sol).padStart(2, '0')} · ${$('clock').textContent} · ${isNight(state.minutes) ? 'NIGHTTIME' : 'DAYTIME'}`;
   $('day-icon').textContent = isNight(state.minutes) ? '☾' : '☀';
-  $('work-wrap').hidden = !(work > 0 && phase);
-  if (phase && work > 0) {
-    $('work-label').textContent = ['DIGGING', 'AERATING', 'DRILLING', 'PLANTING', 'WATERING', 'HARVESTING'][state.phase];
-    $('work-percent').textContent = `${Math.floor(work / phase.duration * 100)}%`;
-    $('work-fill').style.width = `${Math.min(100, work / phase.duration * 100)}%`;
+  $('work-wrap').hidden = !(irrigationRemaining > 0 || (snap && phase));
+  if (!$('work-wrap').hidden && phase && displayedInsight !== state.phase) {
+    displayedInsight = state.phase;
+    $('insight-title').textContent = operationInsights[state.phase].title;
+    $('insight-text').textContent = operationInsights[state.phase].text;
+    document.querySelectorAll('[data-insight]').forEach(icon => { icon.style.display = Number(icon.dataset.insight) === state.phase ? '' : 'none'; });
+  }
+  if (irrigationRemaining > 0) {
+    const progress = 1 - irrigationRemaining / IRRIGATION_SECONDS;
+    $('work-label').textContent = `SPRINKLERS · ${Math.ceil(irrigationRemaining)}S LEFT`;
+    $('work-percent').textContent = `${Math.floor(progress * 100)}%`;
+    $('work-fill').style.width = `${progress * 100}%`;
+  } else if (phase && snap) {
+    const approaching = snap.elapsed < snap.duration;
+    const progress = approaching ? snap.elapsed / snap.duration : work / phase.duration;
+    $('work-label').textContent = approaching ? 'APPROACHING PLOT' : ['TILLING', 'FURROWING', 'DRILLING', 'PLANTING', 'IRRIGATING', 'HILLING', 'CHECKING WATER', 'HARVESTING'][state.phase];
+    $('work-percent').textContent = `${Math.floor(Math.min(1, progress) * 100)}%`;
+    $('work-fill').style.width = `${Math.min(100, progress * 100)}%`;
   }
   if (currentTarget !== null && phase) {
     const plot = state.plots[currentTarget];
-    const label = plot.stage === 5 ? ['PLANTED', 'SPROUT', 'LEAFING', 'MATURE PLANT', 'READY TO HARVEST'][growthStage(plot.growth)] : `PLOT ${String(currentTarget + 1).padStart(2, '0')}`;
+    const label = plot.stage >= 5 && plot.stage <= 7 ? ['PLANTED', 'SPROUT', 'LEAFING', 'MATURE PLANT', 'READY TO HARVEST'][growthStage(plot.growth)] : `PLOT ${String(currentTarget + 1).padStart(2, '0')}`;
     $('target-label').textContent = `${label}  ·  ${canWork(state, plot, activeTool) ? 'WORK TO ' + phase.action.toUpperCase() : 'FOLLOW CURRENT OBJECTIVE'}`;
   } else $('target-label').textContent = '';
+}
+
+function updateInteractionPrompt() {
+  const prompt = $('interaction-prompt');
+  if (!started || !$('info').hidden || restCutscene || switching || plantingActive || plantReturn) { prompt.hidden = true; return; }
+  astronaut.getWorldPosition(astronautWorld);
+  const phase = PHASES[state.phase];
+  let key = '', action = '', alternative = '';
+  if (nearWaterSwitch(astronautWorld) && (phase?.action === 'water' || irrigationRemaining > 0)) {
+    interactionPosition.set(WATER_SWITCH.x, 1.8, WATER_SWITCH.z);
+    if (irrigationRemaining > 0) { action = `SPRINKLERS RUNNING · ${Math.ceil(irrigationRemaining)}S`; }
+    else if (!parked) { key = 'F'; action = 'PARK MACHINE'; alternative = 'B / PARK TOOL'; }
+    else if (!canStartIrrigation(state)) { action = 'WAIT FOR CROPS TO GROW'; }
+    else { key = 'SPACE'; action = 'START SPRINKLERS'; alternative = 'A / WORK'; }
+  } else if (nearRestDoor(parked ? astronaut.position : rig.position)) {
+    interactionPosition.set(REST_DOOR.x, 2.8, REST_DOOR.z);
+    if (isNight(state.minutes) && irrigationRemaining === 0) { key = 'SPACE'; action = 'REST'; alternative = 'A / WORK'; }
+    else { action = irrigationRemaining > 0 ? 'WAIT FOR SPRINKLERS' : 'REST AVAILABLE AT 19:00'; }
+  } else if (parked) {
+    rig.localToWorld(interactionPosition.set(0, 0, 1.05));
+    if (Math.hypot(astronaut.position.x - interactionPosition.x, astronaut.position.z - interactionPosition.z) <= 1.4) {
+      interactionPosition.y += 1.7;
+      key = 'F'; action = 'PICK UP MACHINE'; alternative = 'B / PICK UP TOOL';
+    }
+  } else if (phase && currentTarget !== null && !snap && canWork(state, state.plots[currentTarget], activeTool)) {
+    const target = plots[currentTarget];
+    const front = interactionPosition.set(0, 0, -TOOL_OFFSET);
+    rig.localToWorld(front);
+    if (Math.hypot(front.x - target.x, front.z - target.z) <= 2.1) {
+      interactionPosition.set(target.x, 1.9, target.z);
+      key = 'SPACE'; action = `HOLD TO ${phase.action.toUpperCase()}`; alternative = 'A / WORK';
+    }
+  }
+  if (!action) { prompt.hidden = true; return; }
+  interactionProjection.copy(interactionPosition).project(camera);
+  if (interactionProjection.z < -1 || interactionProjection.z > 1 || Math.abs(interactionProjection.x) > 1 || Math.abs(interactionProjection.y) > 1) { prompt.hidden = true; return; }
+  prompt.hidden = false;
+  const keyElement = $('interaction-key'), actionElement = $('interaction-action'), alternativeElement = $('interaction-alternative');
+  if (keyElement.textContent !== key) keyElement.textContent = key;
+  keyElement.hidden = !key;
+  if (actionElement.textContent !== action) actionElement.textContent = action;
+  if (alternativeElement.textContent !== alternative) alternativeElement.textContent = alternative;
+  alternativeElement.hidden = !alternative;
+  prompt.style.left = `${Math.max(80, Math.min(innerWidth - 80, (interactionProjection.x + 1) * innerWidth / 2))}px`;
+  prompt.style.top = `${Math.max(45, Math.min(innerHeight - 10, (1 - interactionProjection.y) * innerHeight / 2))}px`;
 }
 
 function nearestTarget() {
   const front = new THREE.Vector3(0, 0, -TOOL_OFFSET).applyAxisAngle(new THREE.Vector3(0, 1, 0), rig.rotation.y).add(rig.position);
   const distance = i => Math.hypot(plots[i].x - front.x, plots[i].z - front.z);
-  if (pinnedTarget !== null && distance(pinnedTarget) < 2.15) return pinnedTarget;
+  const phase = PHASES[state.phase];
+  if (!phase) return null;
+  const eligible = i => canWork(state, state.plots[i], phase.tool || activeTool);
+  if (pinnedTarget !== null && eligible(pinnedTarget)) return pinnedTarget;
   pinnedTarget = null;
-  let best = null, bestDist = 2.15;
+  let best = null, bestDist = Infinity;
   plots.forEach((plot, i) => {
     const d = distance(i);
-    if (d < bestDist && (state.phase === 5 ? state.plots[i].stage === 5 : state.plots[i].stage === state.phase)) { bestDist = d; best = i; }
+    if (d < bestDist && eligible(i)) { bestDist = d; best = i; }
   });
   return best;
 }
@@ -728,8 +976,51 @@ function setScreenWork(enabled) {
 function clearInputs() {
   keys.clear(); dragging = false; touchCamera = null; touchWorkPointer = null; resetJoystick();
   $('touch-work').classList.remove('pressed');
-  setScreenMove(null); setScreenWork(false); gamepadWorkReady = false;
+  setScreenMove(null); setScreenWork(false); gamepadWorkReady = false; previousWorking = false;
 }
+function toggleMachine() {
+  if (!started || !$('info').hidden || restCutscene) return;
+  if (switching || plantingActive || plantReturn) {
+    message('Finish the current task before parking or picking up the machine.');
+    return;
+  }
+  if (!parked && Math.hypot(rig.position.x, rig.position.z) > MOVEMENT_RADIUS) {
+    message('Move the machine back inside the field before parking it.');
+    return;
+  }
+  if (parked) {
+    const handle = rig.localToWorld(new THREE.Vector3(0, 0, 1.05));
+    if (Math.hypot(astronaut.position.x - handle.x, astronaut.position.z - handle.z) > 1.4) {
+      message('Return to the machine handle to pick it up.');
+      return;
+    }
+    clearInputs();
+    rig.attach(astronaut);
+    astronaut.position.set(0, 0, 1.05); astronaut.rotation.set(0, 0, 0);
+    parked = false;
+    message('Machine picked up.');
+  } else {
+    clearInputs();
+    work = 0; workTarget = null; workPhase = null; workRoute = null; snap = null;
+    attachmentPivot.rotation.x = 0;
+    detachUpright(scene, astronaut);
+    parked = true;
+    message('Machine parked. Press F or the machine button near its handle to pick it up.');
+  }
+  updateToolUI();
+  persistProgress();
+}
+
+function startIrrigation() {
+  if (irrigationRemaining > 0) { message('The sprinklers are already running.'); return; }
+  if (PHASES[state.phase]?.action !== 'water') { message('The sprinklers are only needed during an irrigation objective.'); return; }
+  if (!canStartIrrigation(state)) { message('Wait until every plot is ready for its irrigation check.'); return; }
+  irrigationRemaining = IRRIGATION_SECONDS;
+  setScreenWork(false);
+  message(`Sprinklers on for ${IRRIGATION_SECONDS} seconds.`);
+  persistProgress();
+}
+
 function setControlsVisible(visible) {
   $('screen-controls').hidden = !visible;
   $('touch-controls').hidden = visible;
@@ -766,14 +1057,13 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   });
 }
 $('touch-work').addEventListener('click', event => { if (event.detail === 0) setScreenWork(!screenWork); });
-$('touch-rest').addEventListener('click', requestRest);
+$('machine-toggle').addEventListener('click', toggleMachine);
 $('controls-button').addEventListener('click', () => setControlsVisible($('screen-controls').hidden));
 document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => {
   setScreenWork(false);
   setScreenMove(screenMove === button.dataset.move ? null : button.dataset.move);
 }));
 $('screen-work').addEventListener('click', () => { setScreenMove(null); setScreenWork(!screenWork); });
-$('screen-rest').addEventListener('click', requestRest);
 document.querySelectorAll('[data-camera]').forEach(button => button.addEventListener('click', () => {
   const action = button.dataset.camera;
   if (action === 'left') cameraAngle += 0.25;
@@ -783,10 +1073,23 @@ document.querySelectorAll('[data-camera]').forEach(button => button.addEventList
   if (action === 'in') cameraDistance = Math.max(7, cameraDistance - 1);
   if (action === 'out') cameraDistance = Math.min(20, cameraDistance + 1);
 }));
-$('start-button').addEventListener('click', () => { $('intro').hidden = true; started = true; message('Welcome to the farm module. Follow your first objective.'); renderer.domElement.focus(); });
+if (saved) $('start-button').firstChild.textContent = 'RESUME THE MISSION ';
+$('start-button').addEventListener('click', () => { $('intro').hidden = true; started = true; message(saved ? 'Welcome back. Your progress has been restored.' : 'Welcome to the farm module. Follow your first objective.'); renderer.domElement.focus(); });
 $('info-button').addEventListener('click', () => { clearInputs(); $('info').hidden = false; $('close-info').focus(); });
 $('close-info').addEventListener('click', () => { $('info').hidden = true; $('info-button').focus(); });
-document.querySelectorAll('.tool').forEach(button => button.addEventListener('click', () => selectTool(button.dataset.tool)));
+document.querySelectorAll('.tool').forEach(button => {
+  const showDescription = () => {
+    $('tool-description').textContent = button.dataset.description;
+    $('tool-description').hidden = false;
+  };
+  button.addEventListener('mouseenter', showDescription);
+  button.addEventListener('focus', showDescription);
+  button.addEventListener('mouseleave', () => {
+    if (document.activeElement !== button) $('tool-description').hidden = true;
+  });
+  button.addEventListener('blur', () => { $('tool-description').hidden = true; });
+  button.addEventListener('click', () => { showDescription(); selectTool(button.dataset.tool); });
+});
 renderer.domElement.tabIndex = 0;
 renderer.domElement.addEventListener('contextmenu', event => event.preventDefault());
 function targetPlot(x, y) {
@@ -797,7 +1100,8 @@ function targetPlot(x, y) {
   if (hit) {
     const requested = hit.object.userData.plot;
     pinnedTarget = requested;
-    if (nearestTarget() !== requested) message('Move closer to that plot to work on it.');
+    if (nearestTarget() === requested) message('Plot selected. Hold Work to approach.');
+    else message('That plot is not ready for the current objective.');
   }
 }
 renderer.domElement.addEventListener('pointerdown', event => {
@@ -846,22 +1150,26 @@ window.addEventListener('keydown', event => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   keys.add(event.code);
   if (event.repeat) return;
-  if (event.code === 'Digit1') selectTool('shovel');
-  if (event.code === 'Digit2') selectTool('aerator');
+  if (event.code === 'Digit1') selectTool('tiller');
+  if (event.code === 'Digit2') selectTool('plow');
   if (event.code === 'Digit3') selectTool('auger');
+  if (event.code === 'Digit4') selectTool('sifter');
+  if (event.code === 'KeyF') toggleMachine();
+  if (event.code === 'KeyC') { cameraPan.x = 0; cameraPan.z = 0; }
   if (event.code === 'Equal' || event.code === 'NumpadAdd') cameraDistance = Math.max(7, cameraDistance - 1);
   if (event.code === 'Minus' || event.code === 'NumpadSubtract') cameraDistance = Math.min(20, cameraDistance + 1);
-  if (event.code === 'KeyR') requestRest();
 });
 function requestRest() {
   if (!started || !$('info').hidden || restCutscene) return;
-  if (!isNight(state.minutes)) message('Rest is available at night, from 19:00 to 06:00.');
-  else if (switching) message('Finish changing attachments before resting.');
+  if (!nearRestDoor(parked ? astronaut.position : rig.position)) message('Approach the habitat door to rest.');
+  else if (!isNight(state.minutes)) message('Rest is available at night, from 19:00 to 06:00.');
+  else if (switching || plantingActive || plantReturn) message('Finish the current task before resting.');
+  else if (irrigationRemaining > 0) message('Wait for the sprinklers to finish before resting.');
   else {
     if (!restScene) restScene = createRestScene();
-    rest(state); clearInputs();
-    work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0;
-    gait.height = 0; gait.velocity = 0; astronaut.position.y = 0;
+    rest(state); clearInputs(); persistProgress();
+    work = 0; workTarget = null; workPhase = null; workRoute = null; snap = null; attachmentPivot.rotation.x = 0;
+    gait.blend = 0; astronaut.position.y = parked ? 0.05 : 0;
     restCutscene = { time: 0 };
     $('rest-caption').textContent = 'Returning to the habitat';
     $('rest-fade').style.opacity = '0';
@@ -870,7 +1178,8 @@ function requestRest() {
 }
 window.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', clearInputs);
-document.addEventListener('visibilitychange', () => { if (document.hidden) clearInputs(); });
+window.addEventListener('pagehide', persistProgress);
+document.addEventListener('visibilitychange', () => { if (document.hidden) { persistProgress(); clearInputs(); } });
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   if (restScene) { restScene.view.aspect = innerWidth / innerHeight; restScene.view.updateProjectionMatrix(); }
@@ -891,93 +1200,174 @@ function frame(now) {
       if ($('info').hidden) $('info-button').click(); else $('close-info').click();
     }
     if ($('info').hidden) {
-      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 1)) requestRest();
-      const tools = ['shovel', 'aerator', 'auger'];
-      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 4)) selectTool(tools[(tools.indexOf(activeTool) + 2) % 3]);
-      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 5)) selectTool(tools[(tools.indexOf(activeTool) + 1) % 3]);
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 4)) selectTool(toolTypes[(toolTypes.indexOf(activeTool) + toolTypes.length - 1) % toolTypes.length]);
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 5)) selectTool(toolTypes[(toolTypes.indexOf(activeTool) + 1) % toolTypes.length]);
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 1)) toggleMachine();
     }
   }
   if (!started || !$('info').hidden || restCutscene || !wasStarted) gamepadWorkReady = false;
   previousGamepadButtons = gamepad.buttons;
   if (restCutscene) { updateRestCutscene(dt); return; }
   if (started && $('info').hidden) {
+    const previousAstronautX = astronaut.position.x, previousAstronautZ = astronaut.position.z;
     elapsed += dt; advance(state, dt); updateSwitch(dt);
-    const right = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft')) + Number(screenMove === 'right') - Number(screenMove === 'left') + gamepad.right + joystick.right;
-    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) - Number(keys.has('KeyS') || keys.has('ArrowDown')) + Number(screenMove === 'forward') - Number(screenMove === 'back') + gamepad.forward + joystick.forward;
+    if (irrigationRemaining > 0) {
+      irrigationRemaining = Math.max(0, irrigationRemaining - dt);
+      if (irrigationRemaining === 0) {
+        completeIrrigation(state);
+        message('Sprinklers stopped automatically. Irrigation complete.');
+        persistProgress();
+      }
+    }
+    spray.visible = irrigationRemaining > 0;
+    if (spray.visible) updateSpray(elapsed);
+    switchBeacon.visible = PHASES[state.phase]?.action === 'water' && irrigationRemaining === 0;
+    switchDiamond.rotation.y = elapsed * 2;
+    switchBeacon.position.y = 2.2 + Math.sin(elapsed * 2.5) * 0.1;
+    if (plantReturn) {
+      plantReturn.time = Math.min(0.6, plantReturn.time + dt);
+      const progress = THREE.MathUtils.smoothstep(plantReturn.time, 0, 0.6);
+      astronaut.position.x = THREE.MathUtils.lerp(plantReturn.x, 0, progress);
+      astronaut.position.z = THREE.MathUtils.lerp(plantReturn.z, 1.05, progress);
+      astronaut.rotation.y = plantReturn.angle + Math.atan2(Math.sin(-plantReturn.angle), Math.cos(-plantReturn.angle)) * progress;
+      plantBend = plantReturn.bend * (1 - progress);
+      if (progress === 1) plantReturn = null;
+    }
+    let walkingDistance = Math.hypot(astronaut.position.x - previousAstronautX, astronaut.position.z - previousAstronautZ);
+    saveTimer += dt;
+    if (saveTimer >= 1) { persistProgress(); saveTimer = 0; }
+    mounted.plow.userData.wings.forEach((wing, index) => {
+      wing.rotation.y = (index === 0 ? -1 : 1) * (state.phase === 5 ? -0.65 : 0.65);
+    });
+    const right = Number(keys.has('KeyD')) - Number(keys.has('KeyA')) + Number(screenMove === 'right') - Number(screenMove === 'left') + gamepad.right + joystick.right;
+    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS')) + Number(screenMove === 'forward') - Number(screenMove === 'back') + gamepad.forward + joystick.forward;
     const working = keys.has('Space') || screenWork || touchWorkPointer !== null || (gamepadWorkReady && gamepad.buttons[0]);
+    if (working && !previousWorking) {
+      if (parked && nearWaterSwitch(astronaut.position)) startIrrigation();
+      else if (nearRestDoor(parked ? astronaut.position : rig.position)) {
+        requestRest();
+        if (restCutscene) return;
+      }
+    }
+    previousWorking = working;
+    const pan = cameraRelativeMovement(Number(keys.has('ArrowRight')) - Number(keys.has('ArrowLeft')), Number(keys.has('ArrowUp')) - Number(keys.has('ArrowDown')), cameraAngle);
+    cameraPan.x += pan.x * dt * 3;
+    cameraPan.z += pan.z * dt * 3;
+    const panDistance = Math.hypot(cameraPan.x, cameraPan.z);
+    if (panDistance > 8) { cameraPan.x *= 8 / panDistance; cameraPan.z *= 8 / panDistance; }
     cameraAngle += (Number(keys.has('KeyQ')) - Number(keys.has('KeyE')) - gamepad.orbit) * dt * 1.5;
     cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyI')) - Number(keys.has('KeyK')) + gamepad.tilt) * dt, 0.3, 1.25);
     cameraDistance = THREE.MathUtils.clamp(cameraDistance + (Number(gamepad.buttons[6]) - Number(gamepad.buttons[7])) * dt * 5, 7, 20);
-    const moving = (right !== 0 || forward !== 0) && !switching && !working;
-    let walking = Boolean(switching && (switching.time < 0.8 || switching.time > 2.7));
+    const moving = (right !== 0 || forward !== 0) && !switching && !working && !plantingActive && !plantReturn;
+    if (parked && !moving) astronaut.rotation.y = followCameraTurn(astronaut.rotation.y, previousCameraAngle, cameraAngle);
+    previousCameraAngle = cameraAngle;
     if (moving) {
       camera.getWorldDirection(viewDirection);
       const direction = cameraRelativeMovement(right, forward, Math.atan2(-viewDirection.x, -viewDirection.z));
       const dx = direction.x, dz = direction.z;
-      const oldX = rig.position.x, oldZ = rig.position.z;
+      const movingObject = parked ? astronaut : rig;
+      const oldX = movingObject.position.x, oldZ = movingObject.position.z;
       const speed = Math.min(1, Math.hypot(right, forward));
-      rig.position.x += dx * dt * 2.3 * speed; rig.position.z += dz * dt * 2.3 * speed;
-      const radius = Math.hypot(rig.position.x, rig.position.z);
-      if (radius > MOVEMENT_RADIUS) { rig.position.x *= MOVEMENT_RADIUS / radius; rig.position.z *= MOVEMENT_RADIUS / radius; }
-      rig.rotation.y = Math.atan2(-dx, -dz);
-      machine.position.y = Math.abs(Math.sin(elapsed * 10)) * 0.035;
-      const travel = Math.hypot(rig.position.x - oldX, rig.position.z - oldZ);
-      walking = travel > 0.00001;
-      animateTracks(travel);
+      movingObject.position.x += dx * dt * 2.3 * speed; movingObject.position.z += dz * dt * 2.3 * speed;
+      const radius = Math.hypot(movingObject.position.x, movingObject.position.z), limit = parked ? WALK_RADIUS : MOVEMENT_RADIUS;
+      if (radius > limit) { movingObject.position.x *= limit / radius; movingObject.position.z *= limit / radius; }
+      movingObject.rotation.y = Math.atan2(-dx, -dz);
+      machine.position.y = parked ? 0 : Math.abs(Math.sin(elapsed * 10)) * 0.035;
+      const travel = Math.hypot(movingObject.position.x - oldX, movingObject.position.z - oldZ);
+      walkingDistance += travel;
+      if (!parked) animateTracks(travel);
     } else machine.position.y = 0;
-    currentTarget = state.phase === 0 && workTarget !== null && working && !switching ? workTarget : nearestTarget();
+    if (!working) { workPhase = null; workRoute = null; }
+    let nextRoute = null;
+    if (working && workTarget === null && workPhase === state.phase && workRoute) {
+      const eligible = state.plots.flatMap((plot, index) => canWork(state, plot, activeTool) ? [index] : []);
+      nextRoute = nextSerpentinePlot(eligible, workRoute.index, workRoute.direction);
+    }
+    currentTarget = parked ? null : workTarget !== null && working && !switching ? workTarget : workRoute && working && workPhase === state.phase ? (nextRoute ? nextRoute.index : null) : nearestTarget();
     const phase = PHASES[state.phase], plot = state.plots[currentTarget];
-    if (phase && currentTarget !== null && working && !switching && canWork(state, plot, activeTool)) {
+    if (phase && currentTarget !== null && working && !switching && !plantReturn && (workPhase === null || workPhase === state.phase) && canWork(state, plot, activeTool)) {
       if (workTarget !== currentTarget) {
-        work = 0; workTarget = currentTarget;
-        if (state.phase === 0) {
-          const start = { x: rig.position.x, z: rig.position.z, angle: rig.rotation.y };
-          snap = { start, end: digAlignment(start, plots[currentTarget], TOOL_OFFSET, MOVEMENT_RADIUS) };
-        }
+        work = 0; workTarget = currentTarget; workPhase = state.phase;
+        workRoute = nextRoute || { index: currentTarget, direction: currentTarget % PLOT_COLUMNS < PLOT_COLUMNS / 2 ? -1 : 1 };
+        const start = { x: rig.position.x, z: rig.position.z, angle: rig.rotation.y };
+        snap = createApproach(start, digAlignment(start, plots[currentTarget], TOOL_OFFSET, MOVEMENT_RADIUS, MACHINE_OFFSET), MACHINE_OFFSET);
       }
-      work += dt;
-      if (state.phase === 0 && snap) {
-        const pose = alignmentPose(snap.start, snap.end, work / phase.duration);
-        const oldX = rig.position.x, oldZ = rig.position.z, oldAngle = rig.rotation.y;
+      const { pose, travel, turn, workSeconds } = advanceApproach(snap, dt);
+      if (snap.elapsed <= snap.duration && (workSeconds < dt)) {
         rig.position.x = pose.x; rig.position.z = pose.z; rig.rotation.y = pose.angle;
-        const dx = rig.position.x - oldX, dz = rig.position.z - oldZ;
-        const travel = -dx * Math.sin(rig.rotation.y) - dz * Math.cos(rig.rotation.y);
-        const turn = rig.rotation.y - oldAngle;
-        walking = Math.hypot(dx, dz) > 0.00001 || Math.abs(turn) > 0.00001;
+        walkingDistance += travel + Math.abs(turn) * (MACHINE_OFFSET + 1.05);
         animateTracks(travel, turn);
       }
-      attachmentPivot.rotation.x = state.phase === 0 ? 0.08 * (1 + Math.sin(elapsed * 8)) : 0;
-      if (activeTool === 'auger') mounted.auger.rotation.y += dt * 8;
-      if (activeTool === 'aerator' && state.phase === 1) mounted.aerator.userData.roller.rotation.x += dt * 4;
-      if (work >= phase.duration) {
-        setScreenWork(false);
-        completeWork(state, plot); work = 0; workTarget = null; snap = null; pinnedTarget = null; attachmentPivot.rotation.x = 0;
-        if (state.phase >= 6) message('Mission complete! The first harvest is ready.');
-        else message(state.phase !== PHASES.indexOf(phase) ? `Objective complete. Next: ${PHASES[state.phase].title}.` : `Plot ${currentTarget + 1} complete.`);
+      work += workSeconds;
+      const operating = snap.elapsed >= snap.duration;
+      if (operating && phase.action === 'plant') {
+        const oldX = astronaut.position.x, oldZ = astronaut.position.z;
+        plantingActive = true; plantingPlot = currentTarget;
+        plantPose = plantingPose(work / phase.duration);
+        astronaut.position.x = plantPose.x; astronaut.position.z = plantPose.z; astronaut.rotation.y = plantPose.angle;
+        plantBend = plantPose.bend;
+        plots[currentTarget].seed.visible = plantPose.planted;
+        walkingDistance += Math.hypot(astronaut.position.x - oldX, astronaut.position.z - oldZ);
       }
-    } else { work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0; }
-    advanceGait(gait, walking, dt);
-    astronaut.position.y = gait.height;
-    const flightProgress = gait.height > 0 ? (STEP_LAUNCH_SPEED - gait.velocity) / (2 * STEP_LAUNCH_SPEED) : 0;
+      attachmentPivot.rotation.x = operating && state.phase === 0 ? 0.08 * (1 + Math.sin(elapsed * 8)) : 0;
+      if (operating && activeTool === 'auger') mounted.auger.userData.auger.rotation.y += workSeconds * 8;
+      if (operating && activeTool === 'tiller' && state.phase === 0) mounted.tiller.userData.roller.rotation.x -= workSeconds * 8;
+      if (operating && activeTool === 'sifter' && state.phase === 7) mounted.sifter.userData.basket.position.y = Math.sin(elapsed * 40) * 0.025;
+      if (work >= phase.duration) {
+        stopPlanting(false);
+        completeWork(state, plot); work = 0; workTarget = null; snap = null; pinnedTarget = null; attachmentPivot.rotation.x = 0;
+        persistProgress();
+        mounted.sifter.userData.basket.position.y = 0;
+        if (state.phase !== workPhase) setScreenWork(false);
+        if (state.phase >= PHASES.length) message('Mission complete! The first harvest is ready.');
+        else message(state.phase !== PHASES.indexOf(phase) ? `Objective complete. Release Work, then ${PHASES[state.phase].title.toLowerCase()}.` : `Plot ${currentTarget + 1} complete.`);
+      }
+    } else { stopPlanting(true); work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0; mounted.sifter.userData.basket.position.y = 0; }
+    rememberSafePosition();
+    advanceGait(gait, walkingDistance, dt);
+    astronaut.position.y = (parked ? 0.05 : 0) + gaitBodyOffset(gait) - 0.12 * plantBend;
+    upperBody.rotation.x = -0.8 * plantBend;
     for (let i = 0; i < legs.length; i++) {
-      const stride = Math.sin(flightProgress * Math.PI) * ((gait.steps + i) % 2 ? -1 : 1);
-      legs[i].hip.rotation.x = stride * 0.35;
-      legs[i].knee.rotation.x = Math.max(0, -stride) * 0.45;
+      const pose = gaitLegPose(gait, i);
+      legs[i].hip.rotation.x = THREE.MathUtils.lerp(pose.hip, 0.45, plantBend);
+      legs[i].knee.rotation.x = THREE.MathUtils.lerp(pose.knee, -0.9, plantBend);
+      legs[i].foot.rotation.x = THREE.MathUtils.lerp(pose.ankle, 0.45, plantBend);
     }
     const reaching = switching && switching.time >= 0.8 && switching.time < 2.7;
-    for (const arm of arms) arm.rotation.x = reaching ? 0.5 + Math.sin(elapsed * 6) * 0.12 : 0;
+    for (let i = 0; i < arms.length; i++) {
+      arms[i].arm.visible = !parked;
+      arms[i].walkingArm.visible = parked;
+      arms[i].walkingArm.rotation.x = gaitArmSwing(gait, i);
+      arms[i].arm.rotation.x = reaching ? 0.5 + Math.sin(elapsed * 6) * 0.12 : -(i === 1 ? 1.35 : 0.65) * plantBend;
+    }
+    carriedSeed.visible = Boolean(plantingActive && plantPose && plantPose.carrying);
+    if (carriedSeed.visible) {
+      rig.updateMatrixWorld(true);
+      arms[1].hand.getWorldPosition(seedHandPosition);
+      rig.worldToLocal(seedHandPosition);
+      carriedSeed.position.copy(seedHandPosition).lerp(seedGroundPosition, plantPose.drop);
+    }
     const night = isNight(state.minutes);
-    const lighting = night ? 0.55 : 1;
+    if (night && !previousNight) message('Nightfall: approach the habitat door and press Space or Work to rest.');
+    previousNight = night;
+    doorBeacon.visible = night;
+    doorBeacon.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
+    nightSky.visible = night;
+    $('scene').style.setProperty('--night-opacity', night ? '0.32' : '0');
+    const lighting = night ? 0.32 : 1;
     hemi.intensity = THREE.MathUtils.lerp(hemi.intensity, 2.1 * lighting, dt);
     sun.intensity = THREE.MathUtils.lerp(sun.intensity, 2.5 * lighting, dt);
-    const bg = new THREE.Color(night ? 0x59645f : 0xc8916e);
+    const bg = new THREE.Color(night ? 0x202c42 : 0xc8916e);
     scene.background.lerp(bg, dt * 0.4); scene.fog.color.copy(scene.background);
     if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').classList.remove('show'); }
     updatePlots(); updateUI();
   }
-  targetPoint.set(rig.position.x, 0.7, rig.position.z - 1.2);
+  const cameraFocus = parked ? astronaut.position : rig.position;
+  targetPoint.set(cameraFocus.x + cameraPan.x, 0.7, cameraFocus.z - 1.2 + cameraPan.z);
   cameraPoint.set(targetPoint.x + Math.sin(cameraAngle) * Math.cos(cameraPitch) * cameraDistance, targetPoint.y + Math.sin(cameraPitch) * cameraDistance, targetPoint.z + Math.cos(cameraAngle) * Math.cos(cameraPitch) * cameraDistance);
   camera.position.lerp(cameraPoint, 0.08); camera.lookAt(targetPoint);
+  camera.updateMatrixWorld();
+  updateInteractionPrompt();
   renderer.render(scene, camera);
 }
-updatePlots(); updateUI(); requestAnimationFrame(frame);
+updateToolUI(); updatePlots(); updateUI(); requestAnimationFrame(frame);

@@ -9,3 +9,29 @@
 @media(max-width:850px) and (min-height:501px) and (max-height:700px){.screen-controls{bottom:165px}}
 #scene canvas{touch-action:none}.touch-controls{display:none;position:absolute;inset:0;pointer-events:none;z-index:3}.joystick,.touch-actions{pointer-events:auto}.joystick{position:absolute;left:15px;bottom:160px;width:112px;height:112px;border-radius:50%;border:2px solid #ffffff80;background:#16251d88;touch-action:none}.joystick-knob{position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;border:2px solid #ffffffb0;background:#e8a05fa6;transform:translate(-50%,-50%);pointer-events:none}.joystick span{position:absolute;left:0;right:0;bottom:-18px;text-align:center;color:#fff;font-size:9px;letter-spacing:.1em;text-shadow:0 1px 5px #000;pointer-events:none}.touch-actions{position:absolute;right:15px;bottom:160px;display:flex;align-items:center;gap:8px}.touch-actions button{border:1px solid #ffffff90;background:#1a3028c9;color:#fff;touch-action:none;font-size:10px;font-weight:700;letter-spacing:.08em}.touch-actions #touch-work{width:70px;height:70px;border-radius:50%;background:#c77d43df}.touch-actions #touch-work.pressed,.touch-actions #touch-work[aria-pressed=true]{background:#f4b77a;color:#17211e}.touch-actions #touch-rest{width:48px;height:48px;border-radius:50%}@media(max-width:850px),(pointer:coarse){.touch-controls:not([hidden]){display:block}}@media(max-height:500px){.joystick{bottom:22px;left:15px;width:100px;height:100px}.joystick span{bottom:-14px}.touch-actions{bottom:85px;right:15px}}
 .touch-zoom{position:absolute;right:0;bottom:78px;display:flex;gap:6px}.touch-zoom button{width:44px;height:44px;border-radius:50%;font-size:20px}
+.toolbox{width:620px}.tools{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:850px){.toolbox{width:min(620px,100%)}}
+@media(max-width:600px){.tool-symbol{display:none}.tool b{font-size:10px}.tool small{font-size:7px}.scroll-hint{display:none}}
+#scene::after{content:"";position:absolute;inset:0;background:#091324;opacity:var(--night-opacity,0);transition:opacity 2s;pointer-events:none}
+.interaction-prompt{position:absolute;transform:translate(-50%,-100%);display:flex;align-items:center;gap:8px;max-width:230px;padding:8px 11px;background:#17231ef2;border:1px solid #d5e8d294;box-shadow:0 3px 12px #0006;color:#fff;pointer-events:none;z-index:2}
+.interaction-prompt kbd{min-width:32px;height:30px;padding:0 6px;background:#f4f3e7;border:0;border-radius:3px;color:#17231e;font-size:10px;font-weight:700}
+.interaction-prompt strong,.interaction-prompt small{display:block;white-space:nowrap;letter-spacing:.08em}
+.interaction-prompt strong{font-size:10px}.interaction-prompt small{margin-top:3px;color:#c0d4c2;font-size:8px}
+.toolbox{position:relative}.tool-description{position:absolute;right:0;bottom:calc(100% + 8px);width:min(360px,100%);padding:12px 14px;background:#1b2924f5;border:1px solid #e8a05f;color:#e5eee0;font-size:11px;line-height:1.5;pointer-events:none}
+.save-status{margin-top:8px;font-size:8px;letter-spacing:.08em;color:#a8c9a5}.save-status.save-error{color:#ffb6a2}
+@media(max-width:850px) and (min-height:501px){.tool-description{bottom:calc(100% + 150px)}}
+.work-wrap{width:min(330px,calc(100vw - 30px));border:1px solid #e8a05f80;pointer-events:none}
+.work-insight{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.work-diagram{flex:0 0 84px;width:84px;height:72px;background:#304137;border-radius:4px}
+.work-diagram path,.work-diagram circle{stroke-linecap:round;stroke-linejoin:round}
+.diagram-ground{fill:#73563d;stroke:#aa8056;stroke-width:2}
+.diagram-tool{fill:none;stroke:#f0b27a;stroke-width:3}
+.diagram-arrow{fill:none;stroke:#f3e7d2;stroke-width:2}
+.diagram-seed{fill:#c69b65;stroke:#f1d39c;stroke-width:1.5}
+.diagram-water{fill:none;stroke:#8bd5f7;stroke-width:3;stroke-linecap:round}
+.diagram-plant{fill:none;stroke:#a8d09d;stroke-width:2.5}
+.work-insight-copy span{display:block;color:#e5a56d;font-size:8px;font-weight:700;letter-spacing:.13em}
+.work-insight-copy strong{display:block;margin-top:5px;color:#f5f2e7;font-size:12px}
+.work-insight-copy p{margin:4px 0 0;color:#d0dfcf;font-size:11px;line-height:1.4}
+@media(max-height:500px){.work-wrap{width:min(285px,calc(100vw - 30px));padding:8px}.work-diagram{flex-basis:60px;width:60px;height:52px}.work-insight{gap:8px;margin-bottom:7px}.work-insight-copy p{font-size:10px}}
+.harvest-total{margin-top:8px;font-size:8px;letter-spacing:.08em;color:#e6c19a}
