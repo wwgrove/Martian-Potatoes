@@ -777,6 +777,13 @@ const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const targetPoint = new THREE.Vector3(), cameraPoint = new THREE.Vector3(), viewDirection = new THREE.Vector3();
 const interactionPosition = new THREE.Vector3(), interactionProjection = new THREE.Vector3(), astronautWorld = new THREE.Vector3();
 const coarsePointer = window.matchMedia('(pointer: coarse)');
+const desktopLayout = window.matchMedia('(min-width: 601px) and (pointer: fine), (min-width: 601px) and (pointer: none)');
+function positionFieldGuide() {
+  const container = desktopLayout.matches ? $('toolbox') : $('mission-hud');
+  container.append($('work-wrap'));
+}
+desktopLayout.addEventListener('change', positionFieldGuide);
+positionFieldGuide();
 const seedHandPosition = new THREE.Vector3(), seedGroundPosition = new THREE.Vector3(0, 0.12, -TOOL_OFFSET);
 
 function stopPlanting(returnToHandle) {

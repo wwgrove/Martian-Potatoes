@@ -158,7 +158,8 @@ Progress labels: **APPROACHING PLOT**, **TILLING**, **FURROWING**, **DRILLING**,
 
 ## Tool caddy
 
-**SEALED PTO TOOL CADDY**  
+**Space Shovel 001**
+
 **Choose your attachment**  
 **1 / 2 / 3 / 4 TO SWITCH**
 
@@ -177,7 +178,9 @@ Music: **MUSIC: ON**, **MUSIC: OFF**, **MUSIC: START**, **MUSIC: ERROR**; **Mute
 
 Sound effects error: **Sound effects could not load. Check browser audio support and open the app through a web server.**
 
-Top bar: **FIELDWORK / 01**, **MARS SURFACE / AGRICULTURAL HABITAT**, **PARK TOOL** / **PICK UP TOOL**, **CONTROLS**, **?** (menu).
+Top bar: **MARS SURFACE / AGRICULTURAL HABITAT**, **CONTROLS**, **?** (menu).
+
+Touch actions: **PARK TOOL** / **PICK UP TOOL**, **WORK**.
 
 Habitat panel: **HABITAT STATUS · LIVE**, **LOCAL TIME**, **{time}**, **SOL {number} · DAYTIME** / **NIGHTTIME**, **PRESSURIZED**, **LIFE SUPPORT · ONLINE**, **GROW LIGHTS · ONLINE**, **SURFACE GRAVITY · 0.38 G**.
 

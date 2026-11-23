@@ -4,6 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111b1b">
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+  </script>
+  <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-KNC5DGT2"></script>
   <title>Martian Potatoes</title>
   <link rel="stylesheet" href="./style.css">
   <style>
@@ -28,7 +35,7 @@
       <div class="top-actions"><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button type="button" class="icon-button music-icon" data-music-toggle="icon" aria-label="Mute music" aria-pressed="true" title="Mute music">♫</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
     </div>
 
-    <div class="mission-hud">
+    <div id="mission-hud" class="mission-hud">
     <section class="mission panel" aria-labelledby="mission-heading">
       <div class="mission-title-row">
         <div><p class="kicker">Next-Gen Hardware</p><h1 id="mission-heading">Growing<br>potatoes<br><strong>on Mars.</strong></h1></div>
@@ -93,14 +100,14 @@
     <div id="toast" class="toast" role="status"></div>
 
     <div class="bottom">
-      <div class="toolbox panel">
+      <div id="toolbox" class="toolbox panel">
         <div class="action-dock" role="group" aria-label="Machine actions">
           <button id="machine-toggle" class="machine-action" aria-pressed="false">PARK TOOL</button>
           <button id="touch-work" class="work-action" aria-label="Hold to work" aria-pressed="false">WORK</button>
         </div>
         <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span id="tools-label">TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
         <div id="tool-menu" class="tool-menu">
-        <div class="tools-header"><div><span class="eyebrow">SEALED PTO TOOL CADDY</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
+        <div class="tools-header"><div><span class="eyebrow">Space Shovel 001</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
         <div class="tools">
           <button class="tool active" data-tool="tiller" data-description="Counter-rotating curved tines loosen compacted regolith into an airy seedbed without pushing the tracked machine forward." aria-describedby="tool-description" aria-pressed="true"><span class="tool-number">01</span><span class="tool-symbol">✣</span><span><b>Rotary tiller</b><small>LOOSEN SOIL</small></span><kbd>1</kbd></button>
           <button class="tool" data-tool="plow" data-description="Adjustable wings open planting furrows and later hill soil around shoots, protecting tubers from light." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">⌄</span><span><b>Hilling plow</b><small>FURROW &amp; HILL</small></span><kbd>2</kbd></button>
