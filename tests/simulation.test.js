@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
-import { loadProgress, saveProgress, SAVE_KEY } from '../src/persistence.js';
-import { detachUpright } from '../src/scene-helpers.js';
+import { loadProgress, saveProgress, resetProgress, SAVE_KEY } from '../src/persistence.js';
+import { detachUpright, cameraTilt } from '../src/scene-helpers.js';
 import { Group, Scene, Vector3 } from '../vendor/three.module.js';
 
 test('movement follows the camera after orbiting, including diagonals', () => {
@@ -29,6 +29,17 @@ test('a parked astronaut keeps the same camera-relative facing as the camera orb
     assert.ok(Math.abs(updated - facing) <= Math.PI);
   }
   assert.equal(followCameraTurn(0.7, 1, 1), 0.7);
+});
+
+test('camera tilts above the horizon without moving its orbit below the ground', () => {
+  const distance = 11;
+  assert.deepEqual(cameraTilt(0.45, distance), { orbitPitch: 0.45, aimOffset: 0 });
+  const horizon = cameraTilt(0, distance);
+  assert.equal(horizon.orbitPitch, 0.3);
+  assert.ok(Math.abs(horizon.aimOffset - Math.sin(0.3) * distance) < 1e-10);
+  const sky = cameraTilt(-1.1, distance);
+  assert.equal(sky.orbitPitch, 0.3);
+  assert.ok(sky.aimOffset > horizon.aimOffset && Number.isFinite(sky.aimOffset));
 });
 
 test('detaching at any heading preserves an upright astronaut that can turn correctly', () => {
@@ -353,6 +364,15 @@ test('invalid saves and storage failures are reported rather than silently disca
   assert.throws(() => saveProgress(storage, createState(), { x: 0, z: 0, angle: 0 }, 'tiller'), /Storage full/);
   const invalid = JSON.stringify({ version: 1, state: createState(), position: { x: 100, z: 0, angle: 0 }, tool: 'tiller' });
   assert.throws(() => loadProgress({ getItem: key => key === SAVE_KEY ? invalid : null }), /invalid or incompatible/);
+});
+
+test('reset deletes only the saved mission and reports storage failures', () => {
+  const data = new Map([[SAVE_KEY, 'mission'], ['unrelated', 'keep']]);
+  const storage = { removeItem: key => data.delete(key), getItem: key => data.get(key) ?? null };
+  resetProgress(storage);
+  assert.equal(loadProgress(storage), null);
+  assert.equal(data.get('unrelated'), 'keep');
+  assert.throws(() => resetProgress({ removeItem: () => { throw new Error('Storage denied'); } }), /Storage denied/);
 });
 
 test('older saves initialize their cumulative harvest without losing completed plots', () => {

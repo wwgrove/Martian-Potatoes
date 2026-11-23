@@ -37,3 +37,7 @@ export function loadProgress(storage) {
 export function saveProgress(storage, state, position, tool, operator = null, irrigation = null) {
   storage.setItem(SAVE_KEY, JSON.stringify({ version: 1, state, position, tool, operator, irrigation }));
 }
+
+export function resetProgress(storage) {
+  storage.removeItem(SAVE_KEY);
+}

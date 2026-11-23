@@ -19,25 +19,32 @@
 <body>
   <main id="app">
     <div id="scene" aria-label="Interactive 3D view of the Martian greenhouse"></div>
+    <button id="debug-visibility" class="debug-visibility" type="button" aria-label="Hide interface" aria-pressed="false" title="Hide interface">◉</button>
+    <div class="debug-silo panel">
+      <label for="debug-silo-count">SILO PREVIEW · POTATOES</label>
+      <input id="debug-silo-count" type="number" min="0" max="9007199254740991" step="1" inputmode="numeric" placeholder="Actual harvest" aria-describedby="debug-silo-hint debug-silo-error">
+      <small id="debug-silo-hint">Clear to show actual harvest</small>
+      <small id="debug-silo-error" role="alert" hidden></small>
+    </div>
     <div class="topbar">
       <a class="brand" href="./" aria-label="Fieldwork home"><span class="brand-mark">✳</span><span>FIELDWORK <small> / 01</small></span></a>
       <div class="top-center"><span class="status-dot"></span> MARS SURFACE <span class="slash">/</span> AGRICULTURAL HABITAT</div>
-      <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button id="info-button" class="icon-button" aria-label="Open mission information">?</button></div>
+      <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
     </div>
 
     <div class="mission-hud">
     <section class="mission panel" aria-labelledby="mission-heading">
       <div class="eyebrow"><span class="status-dot"></span> ACTIVE MISSION <span class="mission-id">01 / 01</span></div>
-      <div class="mission-title-row"><div><p class="kicker">THE FIRST HARVEST</p><h1 id="mission-heading">A little dirt.<br>A big beginning.</h1></div><span class="mission-icon">✳</span></div>
-      <p class="mission-copy">A small step toward growing food on another world.</p>
+      <div class="mission-title-row"><div><p class="kicker">THE FIRST HARVEST</p><h1 id="mission-heading">Growing potatoes<br>on Mars.</h1></div><span class="mission-icon">✳</span></div>
+      <p class="mission-copy">Prepare the soil, plant seed potatoes and bring in the harvest.</p>
       <div class="divider"></div>
-      <div class="objective-label">OBJECTIVE <span id="objective-count">00 / 20</span></div>
+      <div class="objective-label">POTATO FARM <span id="objective-count">00 / 20 plots</span></div>
       <div id="mobile-clock" class="mobile-clock">SOL 01 · 08:00 · DAYTIME</div>
       <h2 id="objective">Loosen and mix the soil</h2>
       <p id="instruction">Move toward a blue-marked plot and hold SPACE to till.</p>
-      <div class="progress-track"><div id="objective-progress"></div></div>
+      <div id="progress-track" class="progress-track" role="progressbar" aria-label="Current objective progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="objective-progress"></div></div>
       <div class="mission-footer"><span id="phase-number">PHASE 01 / 08</span><span id="phase-name">SOIL PREPARATION</span></div>
-      <div id="harvest-total" class="harvest-total">POTATOES HARVESTED · 0</div>
+      <div id="harvest-total" class="harvest-total" title="Each harvested plot counts as one potato in this simplified demo."><strong id="harvest-count">0</strong><span>POTATOES HARVESTED</span></div>
       <div id="save-status" class="save-status" role="status">AUTOSAVE ON · THIS DEVICE</div>
     </section>
     <div id="work-wrap" class="work-wrap" hidden>
@@ -54,7 +61,7 @@
           <g data-insight="7"><path class="diagram-tool" d="M14 62h43l17-19 M22 62l-3-7 M32 62l-3-7 M42 62l-3-7"/><ellipse class="diagram-seed" cx="38" cy="51" rx="7" ry="5"/><ellipse class="diagram-seed" cx="53" cy="49" rx="7" ry="5"/><path class="diagram-arrow" d="M66 31l9-8m-7 0h7v7"/></g>
         </svg>
         <div class="work-insight-copy" role="status" aria-live="polite">
-          <span>FIELD GUIDE · WHY NOW?</span>
+          <span>FIELD GUIDE</span>
           <strong id="insight-title"></strong>
           <p id="insight-text"></p>
         </div>
@@ -71,7 +78,7 @@
       <div class="env-details"><span><i></i> LIFE SUPPORT <b>ONLINE</b></span><span><i></i> GROW LIGHTS <b>ONLINE</b></span><span><i></i> SURFACE GRAVITY <b>0.38 G</b></span></div>
     </section>
 
-    <div class="scene-label"><span>JEZERO FARM MODULE</span><b>18.44° N &nbsp; 77.45° E</b></div>
+    <div class="scene-label"><span>GROVEWARE MARTIAN FARMING FACILITY</span><b>18.44° N &nbsp; 77.45° E</b></div>
     <div id="target-label" class="target-label" aria-live="polite"></div>
     <div id="interaction-prompt" class="interaction-prompt" role="status" hidden><kbd id="interaction-key"></kbd><span><strong id="interaction-action"></strong><small id="interaction-alternative"></small></span></div>
     <div id="toast" class="toast" role="status"></div>
@@ -80,10 +87,10 @@
       <div class="controls panel">
         <div class="controls-title">FIELD CONTROLS <span>ALL DEVICES</span></div>
         <div class="control-list"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>SPACE</kbd><span>WORK / REST AT DOOR</span></div></div>
-        <div class="control-tip">F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q/E and I/K orbit · scroll or + / − zoom. Gamepad: B parks / picks up, A interacts.</div>
+        <div class="control-tip">Esc opens the menu. F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q clockwise / E counterclockwise · I looks up, K looks down · trackpad pinch or scroll, mouse wheel, or + / − to zoom. Gamepad: B parks / picks up, A interacts.</div>
       </div>
       <div class="toolbox panel">
-        <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span>TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
+        <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span id="tools-label">TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
         <div id="tool-menu" class="tool-menu">
         <div class="tools-header"><div><span class="eyebrow">SEALED PTO TOOL CADDY</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
         <div class="tools">
@@ -137,30 +144,58 @@
     <div id="intro" class="overlay">
       <section class="intro-card" role="dialog" aria-modal="true" aria-labelledby="intro-title">
         <div class="intro-top"><span>FIELDWORK <b> / 01</b></span><span>CONCEPT EXPERIENCE</span></div>
-        <div class="intro-art"><span>✳</span><div>AN EXPERIMENT IN<br><b>GROWING BEYOND EARTH.</b></div></div>
         <p class="kicker">WELCOME TO THE FARM MODULE</p>
-        <h2 id="intro-title">From red planet<br>to <em>green shoots.</em></h2>
-        <p>Meet a multi-tool built for a new kind of fieldwork. Prepare the soil, plant your crop, and see what it takes to bring a little life to Mars.</p>
-        <div class="intro-note"><span>✦</span> This is a conceptual demonstration. The environment and farming systems are imagined; the day and plant growth are accelerated.</div>
-        <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
+        <h2 id="intro-title">Grow potatoes on <em>Mars.</em></h2>
+        <p>A tracked machine swaps powered heads to prepare, plant and harvest potatoes in a Martian habitat.</p>
+        <div class="intro-plan-header"><strong>HOW TO PLAY</strong><span>SCROLL TO READ ↓</span></div>
+        <div class="intro-plan" tabindex="0" role="region" aria-label="Game instructions, scroll down to read">
+          <p class="plan-intro">Move with WASD or the joystick. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.</p>
+          <ol class="plan-steps">
+            <li><strong>1. Till · Tool 1</strong><p>Loosen the soil to give the potatoes room to grow.</p></li>
+            <li><strong>2. Furrow · Tool 2</strong><p>Use the plow to open the planting rows.</p></li>
+            <li><strong>3. Drill · Tool 3</strong><p>Use the auger to make holes for the seed potatoes.</p></li>
+            <li><strong>4. Plant by hand</strong><p>Work each plot to take a seed potato from the machine's bin and plant it.</p></li>
+            <li><strong>5. Water</strong><p>Park the machine with F or Park tool. Walk to the white cabinet and press Space or Work at its switch.</p></li>
+            <li><strong>6. Hill · Tool 2 again</strong><p>Pick up the machine and select the plow again. Mound soil over the shoots to protect the potatoes from light.</p></li>
+            <li><strong>7. Water again</strong><p>Park the machine and use the cabinet switch when the growing tubers are ready.</p></li>
+            <li><strong>8. Harvest · Tool 4</strong><p>Pick up the machine and use the lifter to harvest. Select the tiller to start another crop; your total is kept.</p></li>
+          </ol>
+          <p class="plan-intro">At night, approach the habitat door and press Space or Work to rest and speed up growth.</p>
+          <p class="intro-note">This concept demonstration uses accelerated time and growth; its environment and farming systems are imagined.</p>
+        </div>
+        <div class="intro-actions">
+          <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
+          <button type="button" class="reset-progress">RESET PROGRESS</button>
+        </div>
         <small>TOUCH · MOUSE · KEYBOARD · GAMEPAD</small>
       </section>
     </div>
     <div id="info" class="overlay" hidden>
       <section class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
-        <div class="intro-top"><span>FIELD NOTES <b> / 01</b></span><button id="close-info" class="icon-button" aria-label="Close mission information">×</button></div>
+        <div class="intro-top"><span>MENU <b> / FIELD NOTES · ESC TO CLOSE</b></span><button id="close-info" class="icon-button" aria-label="Close menu and field notes">×</button></div>
         <h2 id="info-title">A farm is a system.</h2>
         <p>This concept imagines a pressurized, climate-controlled greenhouse connected to a habitat. The growing medium is assumed to have already been treated for perchlorates and amended with nutrients; untreated Martian regolith is not ready for planting.</p>
         <p>Recycled water, root-zone irrigation, supplemental lighting, power, and life support are essential dependencies. These are conceptual assumptions from the supplied research, not a validated Mars farming plan.</p>
         <p>Twenty plots and accelerated work keep this a short experience. The powered heads till, furrow and hill, bore planting holes, and lift the harvest; the sealed caddy protects their couplers from dust. Seed potatoes are stored beneath the caddy and planted by hand.</p>
         <p>Park the machine and use the switch on the white cabinet to run the sprinklers for five seconds after planting and again during tuber growth. Automatic watering between these two checkpoints represents recurring irrigation, not just two waterings for the season. Growth takes 30 seconds per plot, paused at checkpoints until the work is done; night rest advances it by up to 15 seconds.</p>
         <p>Progress saves automatically in this browser on this device. It does not sync between devices and may be removed if site data is cleared. The mission panel warns you if saving is unavailable.</p>
+        <button type="button" class="reset-progress">RESET PROGRESS</button>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.</p>
-        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q/E and I/K to orbit, and +/− to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
+        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>
     </div>
+    <dialog id="reset-dialog" class="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
+      <h2 id="reset-title">Reset progress?</h2>
+      <p id="reset-description">This permanently deletes this browser's saved mission, including your plots, time and total potatoes harvested. The experience will restart from the beginning.</p>
+      <label class="reset-confirmation"><input id="reset-confirmation" type="checkbox"> <span>I understand that my saved progress will be deleted.</span></label>
+      <p id="reset-error" class="reset-error" role="alert" hidden></p>
+      <div class="reset-actions">
+        <button type="button" id="reset-cancel">CANCEL</button>
+        <button type="button" id="reset-confirm" disabled>DELETE PROGRESS</button>
+      </div>
+    </dialog>
     <div id="error" class="error" role="alert" hidden></div>
   </main>
   <script type="module" src="./src/main.js"></script>

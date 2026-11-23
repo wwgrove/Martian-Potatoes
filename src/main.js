@@ -1,8 +1,9 @@
 import * as THREE from '../vendor/three.module.js';
-import { detachUpright } from './scene-helpers.js';
+import { detachUpright, cameraTilt } from './scene-helpers.js';
 import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, completeWork, startNextCycle, phaseProgress } from './simulation.js';
-import { readGamepad, newlyPressed, joystickVector } from './controls.js';
-import { loadProgress, saveProgress } from './persistence.js';
+import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, wheelZoomDelta } from './controls.js';
+import { loadProgress, saveProgress, resetProgress } from './persistence.js';
+import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
 
 const $ = id => document.getElementById(id);
 let storage = null, saved = null, savingBlocked = false, saveFailed = false;
@@ -46,7 +47,7 @@ const mat = {
   darkSteel: material(0x6a7770), white: material(0xe5e2ce), suit: material(0xcdd4c7),
   suitDark: material(0x8d9f95), visor: material(0x304f50, { metalness: 0.35, roughness: 0.3 }),
   red: material(0xc76c49), dirt: material(0x76513b), soil: material(0x503d30),
-  worked: material(0x3e3027), sand: material(0xb96f50), floor: material(0xa58e74),
+  worked: material(0x211710), sand: material(0xb96f50), floor: material(0xa58e74),
   green: material(0x719765), leaf: material(0x67965e), leafLight: material(0x9abb7d),
   cream: material(0xe7dcbf), potato: material(0xc69b65), light: new THREE.MeshBasicMaterial({ color: 0xffe5a7 }),
   blue: material(0x799f9e), glass: new THREE.MeshBasicMaterial({ color: 0xb9d6c6, transparent: true, opacity: 0.095, side: THREE.DoubleSide, depthWrite: false })
@@ -111,6 +112,71 @@ for (let i = 0; i < exteriorRocks.count; i++) {
   instanceTransform.updateMatrix(); exteriorRocks.setMatrixAt(i, instanceTransform.matrix);
 }
 scene.add(exteriorRocks);
+
+const silo = new THREE.Group();
+silo.position.set(-10, 0, -10);
+scene.add(silo);
+const siloRadius = SILO_RADIUS, siloHeight = SILO_HEIGHT;
+const siloFrame = material(0x9caea6, { metalness: 0.5, roughness: 0.45 });
+const siloGlass = new THREE.MeshBasicMaterial({ color: 0xd7e9df, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false });
+cylinder(silo, mat.darkSteel, 0, SILO_FLOOR_HEIGHT / 2, 0, siloRadius + 0.2, SILO_FLOOR_HEIGHT);
+const siloWalls = new THREE.Mesh(new THREE.CylinderGeometry(siloRadius, siloRadius, siloHeight, 24, 1, true), siloGlass);
+siloWalls.position.y = siloHeight / 2; silo.add(siloWalls);
+for (let i = 0; i < 8; i++) {
+  const angle = i * Math.PI / 4;
+  cylinder(silo, siloFrame, Math.cos(angle) * siloRadius, siloHeight / 2, Math.sin(angle) * siloRadius, 0.065, siloHeight);
+}
+const siloRings = new THREE.InstancedMesh(new THREE.TorusGeometry(siloRadius, 0.055, 5, 24), siloFrame, Math.ceil(siloHeight / 2.4));
+for (let i = 0; i < siloRings.count; i++) {
+  instanceTransform.position.set(0, i * 2.4 + 0.2, 0);
+  instanceTransform.rotation.set(-Math.PI / 2, 0, 0);
+  instanceTransform.scale.set(1, 1, 1); instanceTransform.updateMatrix();
+  siloRings.setMatrixAt(i, instanceTransform.matrix);
+}
+silo.add(siloRings);
+const siloPotatoes = new THREE.InstancedMesh(sphereGeo, mat.potato, SILO_CAPACITY);
+siloPotatoes.count = 0;
+siloPotatoes.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, siloHeight / 2, 0), Math.hypot(siloHeight / 2, siloRadius));
+silo.add(siloPotatoes);
+let displayedHarvest = -1, siloPreview = null, siloFalling = [], siloTarget = 0, siloRainCredit = 0;
+function setSiloPotato(index, elapsed = Infinity) {
+  const pose = siloPotatoPose(index);
+  instanceTransform.position.set(pose.x, pose.y + siloFallOffset(index, pose.y, elapsed), pose.z);
+  instanceTransform.rotation.set(pose.tiltX, pose.yaw, pose.tiltZ);
+  instanceTransform.scale.set(SILO_POTATO_SCALE.x, SILO_POTATO_SCALE.y, SILO_POTATO_SCALE.z); instanceTransform.updateMatrix();
+  siloPotatoes.setMatrixAt(index, instanceTransform.matrix);
+}
+function updateSilo(total) {
+  if (total === displayedHarvest) return;
+  siloTarget = Math.min(total, SILO_CAPACITY);
+  if (displayedHarvest < 0) {
+    siloPotatoes.count = siloTarget;
+    for (let i = 0; i < siloTarget; i++) setSiloPotato(i);
+    siloPotatoes.instanceMatrix.needsUpdate = true;
+  } else if (siloTarget < siloPotatoes.count) {
+    siloPotatoes.count = siloTarget;
+    siloFalling = siloFalling.filter(({ index }) => index < siloTarget);
+  }
+  if (siloTarget <= siloPotatoes.count) siloRainCredit = 0;
+  displayedHarvest = total;
+}
+function animateSilo(now, dt) {
+  if (!siloFalling.length && siloPotatoes.count === siloTarget) return;
+  siloFalling = siloFalling.filter(({ index, startTime }) => {
+    const elapsed = (now - startTime) / 1000;
+    setSiloPotato(index, elapsed);
+    return elapsed < 1.8;
+  });
+  const step = siloRainStep(siloTarget - siloPotatoes.count, siloFalling.length, siloRainCredit, dt);
+  siloRainCredit = step.credit;
+  for (let i = 0; i < step.count; i++) {
+    const index = siloPotatoes.count++;
+    siloFalling.push({ index, startTime: now });
+    setSiloPotato(index, 0);
+  }
+  siloPotatoes.instanceMatrix.needsUpdate = true;
+}
+
 const platform = cylinder(scene, mat.floor, 0, -0.03, 0, 10.1, 0.22);
 platform.scale.z = 1;
 const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat.glass);
@@ -162,7 +228,7 @@ switchBeacon.add(switchDiamond); switchBeacon.visible = false;
 
 const plots = [];
 const soilDetails = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x715741), PLOT_COUNT * 24);
-const plotMaterial = [mat.soil, mat.worked, material(0x49382b), material(0x594332), material(0x614831), material(0x4c3b2b), material(0x493a2a), material(0x4c3b2b), material(0x66503a)];
+const plotMaterial = [mat.soil, mat.worked, material(0x291b14), material(0x2d1f17), material(0x614831), material(0x4c3b2b), material(0x493a2a), material(0x4c3b2b), material(0x66503a)];
 const furrows = new THREE.InstancedMesh(sphereGeo, material(0x79543b), PLOT_COUNT * 5);
 const plantingHoles = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 20), material(0x211711), PLOT_COUNT);
 const plantedMounds = new THREE.InstancedMesh(sphereGeo, material(0x926b4b), PLOT_COUNT);
@@ -179,7 +245,7 @@ function updatePlotDetails(visual, index, stage) {
   const { x, z } = visual;
   for (let i = 0; i < 5; i++) {
     const visible = stage >= 2 && stage <= 3;
-    setPlotDetail(furrows, index * 5 + i, x + (i - 2) * 0.3, 0.115, z, visible ? 0.075 : 0, 0.035, 0.75);
+    setPlotDetail(furrows, index * 5 + i, x, 0.115, z + (i - 2) * 0.3, visible ? 0.75 : 0, 0.035, 0.075);
   }
   setPlotDetail(plantingHoles, index, x, 0.16, z, stage === 3 ? 1 : 0, 1, 1, true);
   setPlotDetail(plantedMounds, index, x, 0.12, z, stage >= 4 && stage <= 7 ? (stage >= 6 ? 0.55 : 0.32) : 0, stage >= 6 ? 0.18 : 0.1, 0.4);
@@ -205,7 +271,7 @@ for (let row = 0; row < PLOT_ROWS; row++) {
       instanceTransform.updateMatrix(); soilDetails.setMatrixAt(index * 24 + n, instanceTransform.matrix);
     }
     // Thin irrigation lines run below the growing surface.
-    for (const dx of [-0.5, 0.5]) box(group, mat.black, dx, 0.31, 0, 0.035, 0.025, 1.8);
+    for (const dz of [-0.5, 0.5]) box(group, mat.black, 0, 0.31, dz, 1.7, 0.025, 0.035);
     const marker = new THREE.Mesh(new THREE.RingGeometry(0.23, 0.27, 24), new THREE.MeshBasicMaterial({ color: 0xe9c78e, side: THREE.DoubleSide }));
     marker.rotation.x = -Math.PI / 2; marker.position.y = 0.33; group.add(marker);
     const selected = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.76, 4), new THREE.MeshBasicMaterial({ color: 0xffd69a, side: THREE.DoubleSide }));
@@ -576,7 +642,8 @@ const treadDistance = [0, 0];
 const keys = new Set();
 let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false;
 let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null, touchCamera = null;
-let cameraAngle = 0.38, cameraPitch = 0.62, cameraDistance = 11;
+const CAMERA_MIN_PITCH = -1.1, CAMERA_MAX_PITCH = 1.25;
+let cameraAngle = 0.38, cameraPitch = 0.45, cameraDistance = 11;
 let previousCameraAngle = cameraAngle;
 const cameraPan = { x: 0, z: 0 };
 let dragging = false, lastX = 0, lastY = 0;
@@ -792,16 +859,27 @@ function updateSwitch(dt) {
   }
   if (t >= 3.5) { astronaut.position.x = 0; astronaut.position.z = 1.05; astronaut.rotation.y = 0; lidPivot.rotation.z = 0; switching = null; }
 }
+const toolLabels = { tiller: '01 · Rotary tiller', plow: '02 · Hilling plow', auger: '03 · Mixing auger', sifter: '04 · Vibratory lifter' };
+let lastToolHintPhase = -1;
 function updateToolUI() {
+  const required = state.phase === PHASES.length ? 'tiller' : PHASES[state.phase]?.tool;
+  const needsTool = required && required !== activeTool;
   document.querySelectorAll('.tool').forEach(button => {
     const selected = button.dataset.tool === activeTool;
     button.classList.toggle('active', selected); button.setAttribute('aria-pressed', String(selected));
-    if (selected) $('current-tool').textContent = button.querySelector('b').textContent;
+    const needed = needsTool && button.dataset.tool === required;
+    button.classList.toggle('required', Boolean(needed));
+    button.setAttribute('aria-label', `${button.querySelector('b').textContent}${needed ? ', required for current objective' : ''}`);
   });
+  $('tools-label').textContent = needsTool ? 'SELECT TOOL' : 'TOOLS';
+  $('current-tool').textContent = needsTool ? toolLabels[required] : toolLabels[activeTool].slice(5);
+  $('tools-toggle').classList.toggle('needed', Boolean(needsTool));
   $('machine-toggle').textContent = parked ? 'PICK UP TOOL' : 'PARK TOOL';
   $('machine-toggle').setAttribute('aria-pressed', String(parked));
+  lastToolHintPhase = state.phase;
 }
 function updatePlots() {
+  updateSilo(siloPreview === null ? state.totalHarvested : siloPreview);
   plots.forEach((visual, i) => {
     const plot = state.plots[i], stage = growthStage(plot.growth);
     if (visual.lastStage !== plot.stage || visual.lastGrowth !== stage) {
@@ -841,10 +919,16 @@ const operationInsights = [
 let displayedInsight = -1;
 function updateUI() {
   const phase = PHASES[state.phase], done = phaseProgress(state);
-  $('objective-count').textContent = `${String(done).padStart(2, '0')} / ${PLOT_COUNT}`;
-  $('objective-progress').style.width = `${done / PLOT_COUNT * 100}%`;
+  if (lastToolHintPhase !== state.phase) updateToolUI();
+  const watering = phase?.action === 'water';
+  const progress = watering ? (irrigationRemaining > 0 ? 1 - irrigationRemaining / IRRIGATION_SECONDS : 0) : done / PLOT_COUNT;
+  const progressPercent = Math.floor(progress * 100);
+  $('objective-count').textContent = watering ? `${progressPercent}% · FIELD` : `${done} / ${PLOT_COUNT} plots`;
+  $('objective-progress').style.width = `${progress * 100}%`;
+  $('progress-track').setAttribute('aria-valuenow', String(progressPercent));
+  $('progress-track').setAttribute('aria-valuetext', watering ? `${progressPercent}% of field watering` : `${done} of ${PLOT_COUNT} plots`);
   $('objective').textContent = phase ? phase.title : 'Harvest complete';
-  $('harvest-total').textContent = `POTATOES HARVESTED · ${state.totalHarvested}`;
+  $('harvest-count').textContent = state.totalHarvested;
   $('phase-number').textContent = phase ? `PHASE 0${state.phase + 1} / 0${PHASES.length}` : 'MISSION COMPLETE';
   $('phase-name').textContent = phase ? phase.name : 'WELL DONE';
   let instruction = parked ? 'Pick up the machine, then select the rotary tiller for the next crop.' : 'Select the rotary tiller to begin the next crop.';
@@ -858,8 +942,10 @@ function updateUI() {
       else instruction = 'Press Space or Work at the cabinet switch to start the sprinklers.';
     }
     else if (parked) instruction = 'Return to the machine handle and press F or Pick up tool.';
-    else if (phase.tool && phase.tool !== activeTool) instruction = `Select the ${phase.tool} attachment.`;
-    else if (state.phase === 5) instruction = 'Hill each plot when its blue marker appears as the shoots grow.';
+    else if (phase.tool && phase.tool !== activeTool) instruction = state.phase === 5
+      ? 'Select tool 02 · Hilling plow again to mound soil over the shoots.'
+      : `Select tool ${toolLabels[phase.tool]} for this objective.`;
+    else if (state.phase === 5) instruction = 'Use the plow again: hold Space or Work on blue-marked growing plots.';
     else if (state.phase === 7) instruction = 'Harvest blue-marked mature crops. Rest at night to accelerate growth.';
     else instruction = `Move to a marked plot and work to ${phase.action}.`;
   }
@@ -984,6 +1070,26 @@ function clearInputs() {
   $('touch-work').classList.remove('pressed');
   setScreenMove(null); setScreenWork(false); gamepadWorkReady = false; previousWorking = false;
 }
+$('debug-visibility').addEventListener('click', () => {
+  const hidden = $('app').classList.toggle('ui-hidden');
+  const label = hidden ? 'Show interface' : 'Hide interface';
+  $('debug-visibility').setAttribute('aria-pressed', String(hidden));
+  $('debug-visibility').setAttribute('aria-label', label);
+  $('debug-visibility').title = label;
+  clearInputs();
+});
+$('debug-silo-count').addEventListener('focus', clearInputs);
+$('debug-silo-count').addEventListener('input', event => {
+  const input = event.currentTarget;
+  const value = input.valueAsNumber;
+  const valid = !input.validity.badInput && (input.value === '' || (Number.isSafeInteger(value) && value >= 0));
+  $('debug-silo-error').hidden = valid;
+  $('debug-silo-error').textContent = valid ? '' : 'Enter a whole number from 0 to 9007199254740991.';
+  input.setAttribute('aria-invalid', String(!valid));
+  if (!valid) return;
+  siloPreview = input.value === '' ? null : value;
+  updateSilo(siloPreview === null ? state.totalHarvested : siloPreview);
+});
 function toggleMachine() {
   if (!started || !$('info').hidden || restCutscene) return;
   if (switching || plantingActive || plantReturn) {
@@ -1078,8 +1184,8 @@ document.querySelectorAll('[data-camera]').forEach(button => button.addEventList
   const action = button.dataset.camera;
   if (action === 'left') cameraAngle += 0.25;
   if (action === 'right') cameraAngle -= 0.25;
-  if (action === 'up') cameraPitch = Math.min(1.25, cameraPitch + 0.15);
-  if (action === 'down') cameraPitch = Math.max(0.3, cameraPitch - 0.15);
+  if (action === 'up') cameraPitch = Math.max(CAMERA_MIN_PITCH, cameraPitch - 0.15);
+  if (action === 'down') cameraPitch = Math.min(CAMERA_MAX_PITCH, cameraPitch + 0.15);
   if (action === 'in') cameraDistance = Math.max(7, cameraDistance - 1);
   if (action === 'out') cameraDistance = Math.min(20, cameraDistance + 1);
 }));
@@ -1087,6 +1193,34 @@ if (saved) $('start-button').firstChild.textContent = 'RESUME THE MISSION ';
 $('start-button').addEventListener('click', () => { $('intro').hidden = true; started = true; message(saved ? 'Welcome back. Your progress has been restored.' : 'Welcome to the farm module. Follow your first objective.'); renderer.domElement.focus(); });
 $('info-button').addEventListener('click', () => { clearInputs(); $('info').hidden = false; $('close-info').focus(); });
 $('close-info').addEventListener('click', () => { $('info').hidden = true; $('info-button').focus(); });
+let resetOpener = null;
+document.querySelectorAll('.reset-progress').forEach(button => button.addEventListener('click', () => {
+  clearInputs();
+  resetOpener = button;
+  $('reset-confirmation').checked = false;
+  $('reset-confirm').disabled = true;
+  $('reset-error').hidden = true;
+  $('reset-dialog').showModal();
+  $('reset-cancel').focus();
+}));
+$('reset-confirmation').addEventListener('change', () => { $('reset-confirm').disabled = !$('reset-confirmation').checked; });
+$('reset-cancel').addEventListener('click', () => $('reset-dialog').close());
+$('reset-dialog').addEventListener('close', () => { if (resetOpener) resetOpener.focus(); });
+$('reset-confirm').addEventListener('click', () => {
+  if (!$('reset-confirmation').checked) return;
+  const wasSavingBlocked = savingBlocked;
+  savingBlocked = true;
+  try {
+    resetProgress(storage || window.localStorage);
+  } catch (error) {
+    savingBlocked = wasSavingBlocked;
+    console.error('Unable to delete saved progress:', error);
+    $('reset-error').textContent = 'Could not delete progress. Check browser site storage and try again.';
+    $('reset-error').hidden = false;
+    return;
+  }
+  window.location.reload();
+});
 document.querySelectorAll('.tool').forEach(button => {
   const showDescription = () => {
     $('tool-description').textContent = button.dataset.description;
@@ -1127,14 +1261,14 @@ renderer.domElement.addEventListener('pointermove', event => {
     if (Math.hypot(event.clientX - touchCamera.startX, event.clientY - touchCamera.startY) > 8) touchCamera.moved = true;
     if (touchCamera.moved) {
       cameraAngle -= (event.clientX - touchCamera.x) * 0.006;
-      cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - touchCamera.y) * 0.005, 0.3, 1.25);
+      cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - touchCamera.y) * 0.005, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
     }
     touchCamera.x = event.clientX; touchCamera.y = event.clientY;
     return;
   }
   if (!dragging) return;
   cameraAngle -= (event.clientX - lastX) * 0.006;
-  cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - lastY) * 0.005, 0.3, 1.25);
+  cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - lastY) * 0.005, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
   lastX = event.clientX; lastY = event.clientY;
 });
 renderer.domElement.addEventListener('pointerup', event => {
@@ -1151,14 +1285,25 @@ renderer.domElement.addEventListener('pointercancel', event => {
 window.addEventListener('wheel', event => {
   if (!started || !$('info').hidden || restCutscene) return;
   event.preventDefault();
-  const scale = event.deltaMode === 1 ? 0.16 : event.deltaMode === 2 ? 2 : 0.01;
-  cameraDistance = THREE.MathUtils.clamp(cameraDistance + event.deltaY * scale, 7, 20);
+  cameraDistance = THREE.MathUtils.clamp(cameraDistance + wheelZoomDelta(event.deltaY, event.deltaMode, event.ctrlKey), 7, 20);
 }, { passive: false });
 window.addEventListener('keydown', event => {
+  if (event.target === $('debug-silo-count')) return;
+  if (event.code === 'Escape') {
+    if ($('reset-dialog').open) {
+      if (!event.repeat) { event.preventDefault(); $('reset-dialog').close(); }
+      return;
+    }
+    if (!started || event.repeat) return;
+    event.preventDefault();
+    ($('info').hidden ? $('info-button') : $('close-info')).click();
+    return;
+  }
   if (!started || !$('info').hidden || restCutscene) return;
   if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
+  if (!pressKeyboardKey(keys, event)) return;
+  if (screenMove && ['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(event.code)) setScreenMove(null);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
-  keys.add(event.code);
   if (event.repeat) return;
   if (event.code === 'Digit1') selectTool('tiller');
   if (event.code === 'Digit2') selectTool('plow');
@@ -1186,7 +1331,7 @@ function requestRest() {
     $('rest-cutscene').hidden = false; $('app').classList.add('resting');
   }
 }
-window.addEventListener('keyup', event => keys.delete(event.code));
+window.addEventListener('keyup', event => keys.delete(event.code), true);
 window.addEventListener('blur', clearInputs);
 window.addEventListener('pagehide', persistProgress);
 document.addEventListener('visibilitychange', () => { if (document.hidden) { persistProgress(); clearInputs(); } });
@@ -1202,6 +1347,7 @@ function frame(now) {
   const dt = Math.min((now - previous) / 1000, 1); previous = now;
   if (document.hidden) return;
   const gamepad = readGamepad(navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null);
+  if ($('reset-dialog').open) { gamepadWorkReady = false; previousGamepadButtons = gamepad.buttons; return; }
   const wasStarted = started;
   if (!gamepad.buttons[0]) gamepadWorkReady = true;
   if (newlyPressed(gamepad.buttons, previousGamepadButtons, 0) && !started) $('start-button').click();
@@ -1217,7 +1363,7 @@ function frame(now) {
   }
   if (!started || !$('info').hidden || restCutscene || !wasStarted) gamepadWorkReady = false;
   previousGamepadButtons = gamepad.buttons;
-  if (restCutscene) { updateRestCutscene(dt); return; }
+  if (restCutscene) { if ($('info').hidden) updateRestCutscene(dt); return; }
   if (started && $('info').hidden) {
     const previousAstronautX = astronaut.position.x, previousAstronautZ = astronaut.position.z;
     elapsed += dt; advance(state, dt); updateSwitch(dt);
@@ -1265,8 +1411,8 @@ function frame(now) {
     cameraPan.z += pan.z * dt * 3;
     const panDistance = Math.hypot(cameraPan.x, cameraPan.z);
     if (panDistance > 8) { cameraPan.x *= 8 / panDistance; cameraPan.z *= 8 / panDistance; }
-    cameraAngle += (Number(keys.has('KeyQ')) - Number(keys.has('KeyE')) - gamepad.orbit) * dt * 1.5;
-    cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyI')) - Number(keys.has('KeyK')) + gamepad.tilt) * dt, 0.3, 1.25);
+    cameraAngle += (Number(keys.has('KeyE')) - Number(keys.has('KeyQ')) - gamepad.orbit) * dt * 1.5;
+    cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyK')) - Number(keys.has('KeyI')) + gamepad.tilt) * dt, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
     cameraDistance = THREE.MathUtils.clamp(cameraDistance + (Number(gamepad.buttons[6]) - Number(gamepad.buttons[7])) * dt * 5, 7, 20);
     const moving = (right !== 0 || forward !== 0) && !switching && !working && !plantingActive && !plantReturn;
     if (parked && !moving) astronaut.rotation.y = followCameraTurn(astronaut.rotation.y, previousCameraAngle, cameraAngle);
@@ -1374,10 +1520,13 @@ function frame(now) {
   }
   const cameraFocus = parked ? astronaut.position : rig.position;
   targetPoint.set(cameraFocus.x + cameraPan.x, 0.7, cameraFocus.z - 1.2 + cameraPan.z);
-  cameraPoint.set(targetPoint.x + Math.sin(cameraAngle) * Math.cos(cameraPitch) * cameraDistance, targetPoint.y + Math.sin(cameraPitch) * cameraDistance, targetPoint.z + Math.cos(cameraAngle) * Math.cos(cameraPitch) * cameraDistance);
+  const { orbitPitch, aimOffset } = cameraTilt(cameraPitch, cameraDistance);
+  cameraPoint.set(targetPoint.x + Math.sin(cameraAngle) * Math.cos(orbitPitch) * cameraDistance, targetPoint.y + Math.sin(orbitPitch) * cameraDistance, targetPoint.z + Math.cos(cameraAngle) * Math.cos(orbitPitch) * cameraDistance);
+  targetPoint.y += aimOffset;
   camera.position.lerp(cameraPoint, 0.08); camera.lookAt(targetPoint);
   camera.updateMatrixWorld();
   updateInteractionPrompt();
+  animateSilo(now, dt);
   renderer.render(scene, camera);
 }
 updateToolUI(); updatePlots(); updateUI(); requestAnimationFrame(frame);

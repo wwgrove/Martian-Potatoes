@@ -1,6 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readGamepad, newlyPressed, joystickVector } from '../src/controls.js';
+import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, wheelZoomDelta } from '../src/controls.js';
+
+test('system shortcuts release held keys and stray repeats cannot restart movement', () => {
+  const keys = new Set();
+  assert.equal(pressKeyboardKey(keys, { code: 'KeyW' }), true);
+  assert.equal(keys.has('KeyW'), true);
+  assert.equal(pressKeyboardKey(keys, { code: 'MetaLeft', metaKey: true }), false);
+  assert.equal(keys.size, 0);
+  assert.equal(pressKeyboardKey(keys, { code: 'KeyW', repeat: true }), false);
+  assert.equal(keys.has('KeyW'), false);
+  assert.equal(pressKeyboardKey(keys, { code: 'KeyW' }), true);
+  assert.equal(pressKeyboardKey(keys, { code: 'KeyW', repeat: true }), true);
+  assert.equal(keys.has('KeyW'), true);
+});
+
+test('modified movement shortcuts do not start movement', () => {
+  const keys = new Set(['KeyW', 'KeyD']);
+  assert.equal(pressKeyboardKey(keys, { code: 'KeyA', ctrlKey: true }), false);
+  assert.equal(keys.size, 0);
+});
 
 test('gamepad input applies a deadzone and supports the D-pad', () => {
   const buttons = Array.from({ length: 16 }, () => ({ pressed: false }));
@@ -31,4 +50,13 @@ test('joystick deadzone, direction and maximum travel', () => {
   const diagonal = joystickVector(100, -100, 50);
   assert.ok(Math.abs(Math.hypot(diagonal.right, diagonal.forward) - 1) < 1e-10);
   assert.ok(diagonal.right > 0 && diagonal.forward > 0);
+});
+
+test('wheel zoom responds to small trackpad scrolls and pinches without oversized mouse steps', () => {
+  assert.equal(wheelZoomDelta(4, 0, false), 0.1);
+  assert.equal(wheelZoomDelta(-4, 0, true), -0.2);
+  assert.equal(wheelZoomDelta(100, 0, false), 1);
+  assert.equal(wheelZoomDelta(-100, 0, false), -1);
+  assert.equal(wheelZoomDelta(1, 1, false), 0.4);
+  assert.equal(wheelZoomDelta(1, 2, false), 1);
 });
