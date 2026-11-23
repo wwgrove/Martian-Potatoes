@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#111b1b"/>
+  <circle cx="1000" cy="315" r="290" fill="#1a2928"/>
+  <circle cx="1000" cy="315" r="230" fill="none" stroke="#394a47" stroke-width="2"/>
+  <circle cx="1000" cy="315" r="185" fill="none" stroke="#394a47" stroke-width="2"/>
+  <path d="M75 85h48" stroke="#f5922f" stroke-width="5"/>
+  <text x="75" y="131" fill="#e5a56d" font-family="Arial, sans-serif" font-size="19" font-weight="bold" letter-spacing="3">FIELDWORK 01 / MARS SURFACE</text>
+  <text x="75" y="260" fill="#e7e1cf" font-family="Arial, sans-serif" font-size="78" font-weight="bold">Martian</text>
+  <text x="75" y="350" fill="#e7e1cf" font-family="Arial, sans-serif" font-size="78" font-weight="bold">Potatoes<tspan fill="#f5922f">.</tspan></text>
+  <text x="78" y="410" fill="#b9c3bc" font-family="Arial, sans-serif" font-size="24">An interactive Martian agriculture concept.</text>
+  <path d="M75 515h620" stroke="#394a47" stroke-width="2"/>
+  <text x="78" y="552" fill="#9caea6" font-family="Arial, sans-serif" font-size="17" font-weight="bold" letter-spacing="2">PREPARE / PLANT / HARVEST</text>
+  <image href="favicon.svg" x="805" y="151" width="340" height="301"/>
+</svg>
