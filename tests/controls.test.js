@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, wheelZoomDelta } from '../src/controls.js';
+import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from '../src/controls.js';
 
 test('system shortcuts release held keys and stray repeats cannot restart movement', () => {
   const keys = new Set();
@@ -59,4 +59,34 @@ test('wheel zoom responds to small trackpad scrolls and pinches without oversize
   assert.equal(wheelZoomDelta(-100, 0, false), -1);
   assert.equal(wheelZoomDelta(1, 1, false), 0.4);
   assert.equal(wheelZoomDelta(1, 2, false), 1);
+});
+
+test('two-finger pinch zooms in and out without selecting a plot or jumping back to orbit', () => {
+  const camera = createTouchCamera();
+  assert.equal(camera.start(1, 100, 100), true);
+  assert.equal(camera.start(2, 200, 100), true);
+  assert.deepEqual(camera.move(2, 300, 100), { zoom: 0.5 });
+  assert.deepEqual(camera.move(2, 200, 100), { zoom: 2 });
+  assert.equal(camera.end(2), false);
+  assert.deepEqual(camera.move(1, 110, 105), { dx: 10, dy: 5 });
+  assert.equal(camera.end(1), false);
+});
+
+test('single-finger taps and swipes still work, and cancellation clears gestures', () => {
+  const camera = createTouchCamera();
+  camera.start(1, 100, 100);
+  assert.equal(camera.move(1, 104, 100), null);
+  assert.equal(camera.end(1), true);
+  camera.start(2, 100, 100);
+  assert.deepEqual(camera.move(2, 120, 110), { dx: 20, dy: 10 });
+  assert.equal(camera.end(2), false);
+  camera.start(3, 100, 100);
+  camera.start(4, 100, 100);
+  assert.equal(camera.move(4, 120, 100), null);
+  assert.equal(camera.start(5, 200, 100), false);
+  assert.equal(camera.end(4, true), false);
+  assert.equal(camera.end(3), false);
+  camera.start(6, 100, 100);
+  camera.clear();
+  assert.equal(camera.end(6), false);
 });

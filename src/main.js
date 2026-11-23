@@ -1,11 +1,14 @@
 import * as THREE from '../vendor/three.module.js';
 import { detachUpright, cameraTilt } from './scene-helpers.js';
 import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, completeWork, startNextCycle, phaseProgress } from './simulation.js';
-import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, wheelZoomDelta } from './controls.js';
+import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
 import { loadProgress, saveProgress, resetProgress } from './persistence.js';
 import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
+import { setupMusic } from './music.js';
+import { marsSky } from './sky.js';
 
 const $ = id => document.getElementById(id);
+setupMusic($('background-music'), document.querySelectorAll('[data-music-toggle]'), window, $('music-status'));
 let storage = null, saved = null, savingBlocked = false, saveFailed = false;
 try {
   storage = window.localStorage;
@@ -91,12 +94,33 @@ for (let i = 0; i < 17; i++) {
   rock.rotation.y = i * 0.73; rock.scale.z = 0.6 + (i % 3) * 0.3; scene.add(rock);
 }
 const nightSky = new THREE.Group(); scene.add(nightSky);
-const starMaterial = new THREE.MeshBasicMaterial({ color: 0xe7ede6 });
-for (let i = 0; i < 60; i++) {
-  const angle = i * 2.39996, radius = 23 + i % 5 * 2;
-  sphere(nightSky, starMaterial, Math.sin(angle) * radius, 6 + (i * 13 % 15), Math.cos(angle) * radius, 0.055, 0.055, 0.055);
+const starMaterial = new THREE.MeshBasicMaterial({ color: 0xe7ede6, transparent: true, fog: false });
+for (let i = 0; i < 120; i++) {
+  const angle = i * 2.39996, altitude = (i + 0.5) / 120;
+  const horizontal = Math.sqrt(1 - altitude * altitude) * 55;
+  sphere(nightSky, starMaterial, Math.sin(angle) * horizontal, altitude * 55, Math.cos(angle) * horizontal, 0.04, 0.04, 0.04);
 }
 nightSky.visible = false;
+const skyDistance = 60;
+const skySun = sphere(scene, new THREE.MeshBasicMaterial({ color: 0xffe2a8, fog: false }), 0, 0, 0, 1, 1, 1);
+skySun.name = 'sky-sun';
+const phobosGeometry = new THREE.IcosahedronGeometry(1, 2);
+const phobosVertices = phobosGeometry.attributes.position;
+for (let i = 0; i < phobosVertices.count; i++) {
+  const x = phobosVertices.getX(i), y = phobosVertices.getY(i), z = phobosVertices.getZ(i);
+  const variation = 1 + 0.07 * Math.sin(x * 13 + y * 17 + z * 19);
+  phobosVertices.setXYZ(i, x * variation * 1.12, y * variation * 0.87, z * variation);
+}
+phobosGeometry.computeVertexNormals();
+const phobosMaterial = new THREE.ShaderMaterial({
+  uniforms: { sunDirection: { value: new THREE.Vector3() } },
+  vertexShader: 'varying vec3 worldNormal; void main() { worldNormal = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform vec3 sunDirection; varying vec3 worldNormal; void main() { float light = 0.08 + 0.92 * max(dot(normalize(worldNormal), sunDirection), 0.0); gl_FragColor = vec4(vec3(0.75, 0.70, 0.64) * light, 1.0); }'
+});
+const skyPhobos = new THREE.Mesh(phobosGeometry, phobosMaterial);
+skyPhobos.name = 'sky-phobos'; scene.add(skyPhobos);
+const skyDeimos = sphere(scene, new THREE.MeshBasicMaterial({ color: 0xe3d6c3, fog: false }), 0, 0, 0, 1, 1, 1);
+skyDeimos.name = 'sky-deimos';
 let randomSeed = 4301;
 function random() {
   randomSeed = (randomSeed * 1664525 + 1013904223) >>> 0;
@@ -193,6 +217,21 @@ for (let i = 0; i < 8; i++) {
 }
 const rim = new THREE.Mesh(new THREE.TorusGeometry(10, 0.1, 6, 64), ribMat);
 rim.rotation.x = Math.PI / 2; rim.position.y = 0.15; scene.add(rim);
+
+const growLights = new THREE.Group(); growLights.name = 'grow-lights'; scene.add(growLights);
+const growLamp = material(0xffe1f1, { emissive: 0xffa4d5, emissiveIntensity: 0.7 });
+for (let row = 0; row < PLOT_ROWS; row++) {
+  const z = (row - (PLOT_ROWS - 1) / 2) * 2.1 - 0.3;
+  const y = Math.sqrt(100 - 4.5 ** 2 - z ** 2) - 0.35;
+  box(growLights, mat.darkSteel, 0, y, z, 9.1, 0.14, 0.27);
+  box(growLights, growLamp, 0, y - 0.09, z, 8.9, 0.05, 0.2);
+  for (const x of [-3.8, 3.8]) {
+    const ceiling = Math.sqrt(100 - x ** 2 - z ** 2);
+    rod(growLights, mat.darkSteel, [x, y + 0.07, z], [x, ceiling - 0.08, z], 0.025);
+  }
+  const light = new THREE.PointLight(0xffd7ec, 17, 15, 2);
+  light.position.set(0, y - 0.2, z); growLights.add(light);
+}
 
 // Habitat and infrastructure sit behind the beds, outside the playable dome.
 const hab = new THREE.Group(); hab.position.set(0, 0, -14); scene.add(hab);
@@ -641,7 +680,8 @@ let previousWorking = false, previousNight = false;
 const treadDistance = [0, 0];
 const keys = new Set();
 let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false;
-let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null, touchCamera = null;
+let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null;
+const touchCamera = createTouchCamera();
 const CAMERA_MIN_PITCH = -1.1, CAMERA_MAX_PITCH = 1.25;
 let cameraAngle = 0.38, cameraPitch = 0.45, cameraDistance = 11;
 let previousCameraAngle = cameraAngle;
@@ -711,8 +751,10 @@ function createRestScene() {
   box(interior, mat.light, 0.65, 2.9, -2.2, 1.8, 0.1, 0.12);
 
   const person = new THREE.Group(); interior.add(person);
-  const clothing = material(0x658078), skin = material(0xc69a79), hair = material(0x4f4036);
-  sphere(person, clothing, 0, 1.2, 0, 0.29, 0.46, 0.2);
+  const skin = material(0xc69a79), hair = material(0x4f4036);
+  sphere(person, skin, 0, 1.46, 0, 0.24, 0.18, 0.18);
+  sphere(person, mat.white, 0, 1.14, 0, 0.29, 0.35, 0.2);
+  for (const x of [-0.19, 0.19]) box(person, mat.white, x, 1.49, 0, 0.07, 0.25, 0.3);
   sphere(person, mat.darkSteel, 0, 0.91, 0, 0.25, 0.16, 0.19);
   sphere(person, skin, 0, 1.79, 0, 0.22, 0.27, 0.21);
   sphere(person, hair, 0, 1.98, 0.02, 0.22, 0.09, 0.21);
@@ -723,7 +765,7 @@ function createRestScene() {
     rod(leg, mat.darkSteel, [0, 0, 0], [0, -0.62, 0], 0.11);
     sphere(leg, mat.black, 0, -0.73, -0.06, 0.13, 0.1, 0.2);
     const arm = new THREE.Group(); arm.position.set(side * 0.3, 1.48, 0); person.add(arm);
-    rod(arm, clothing, [0, 0, 0], [side * 0.05, -0.43, 0], 0.095);
+    rod(arm, skin, [0, 0, 0], [side * 0.05, -0.43, 0], 0.095);
     sphere(arm, skin, side * 0.05, -0.48, 0, 0.08, 0.09, 0.08);
     restLegs.push(leg); restArms.push(arm);
   }
@@ -782,7 +824,7 @@ function updateRestCutscene(dt) {
   if ($('rest-caption').textContent !== caption) $('rest-caption').textContent = caption;
   if (t < 4.55) renderer.render(interior, view);
   else {
-    updatePlots(); updateUI(); renderer.render(scene, camera);
+    updatePlots(); updateUI(); updateSky(); renderer.render(scene, camera);
   }
   if (t >= 5) {
     restCutscene = null; $('rest-cutscene').hidden = true; $('app').classList.remove('resting');
@@ -1066,7 +1108,7 @@ function setScreenWork(enabled) {
   $('touch-work').setAttribute('aria-pressed', String(enabled));
 }
 function clearInputs() {
-  keys.clear(); dragging = false; touchCamera = null; touchWorkPointer = null; resetJoystick();
+  keys.clear(); dragging = false; touchCamera.clear(); touchWorkPointer = null; resetJoystick();
   $('touch-work').classList.remove('pressed');
   setScreenMove(null); setScreenWork(false); gamepadWorkReady = false; previousWorking = false;
 }
@@ -1249,21 +1291,21 @@ function targetPlot(x, y) {
   }
 }
 renderer.domElement.addEventListener('pointerdown', event => {
-  if (event.pointerType === 'touch' && !touchCamera && started) {
-    touchCamera = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
-    renderer.domElement.setPointerCapture(event.pointerId);
+  if (event.pointerType === 'touch') {
+    if (started && $('info').hidden && !restCutscene && touchCamera.start(event.pointerId, event.clientX, event.clientY)) renderer.domElement.setPointerCapture(event.pointerId);
   } else if (event.button === 2) {
     dragging = true; lastX = event.clientX; lastY = event.clientY; renderer.domElement.setPointerCapture(event.pointerId);
   } else if (event.button === 0 && event.pointerType !== 'touch') targetPlot(event.clientX, event.clientY);
 });
 renderer.domElement.addEventListener('pointermove', event => {
-  if (touchCamera && event.pointerId === touchCamera.id) {
-    if (Math.hypot(event.clientX - touchCamera.startX, event.clientY - touchCamera.startY) > 8) touchCamera.moved = true;
-    if (touchCamera.moved) {
-      cameraAngle -= (event.clientX - touchCamera.x) * 0.006;
-      cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - touchCamera.y) * 0.005, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
+  if (event.pointerType === 'touch') {
+    const gesture = touchCamera.move(event.pointerId, event.clientX, event.clientY);
+    if (gesture && gesture.zoom !== undefined) {
+      cameraDistance = THREE.MathUtils.clamp(cameraDistance * gesture.zoom, 7, 20);
+    } else if (gesture) {
+      cameraAngle -= gesture.dx * 0.006;
+      cameraPitch = THREE.MathUtils.clamp(cameraPitch + gesture.dy * 0.005, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
     }
-    touchCamera.x = event.clientX; touchCamera.y = event.clientY;
     return;
   }
   if (!dragging) return;
@@ -1272,15 +1314,13 @@ renderer.domElement.addEventListener('pointermove', event => {
   lastX = event.clientX; lastY = event.clientY;
 });
 renderer.domElement.addEventListener('pointerup', event => {
-  if (touchCamera && event.pointerId === touchCamera.id) {
-    if (!touchCamera.moved) targetPlot(event.clientX, event.clientY);
-    touchCamera = null;
-  }
-  if (event.pointerType !== 'touch') dragging = false;
+  if (event.pointerType === 'touch') {
+    if (touchCamera.end(event.pointerId)) targetPlot(event.clientX, event.clientY);
+  } else dragging = false;
 });
-renderer.domElement.addEventListener('pointercancel', event => {
-  if (touchCamera && event.pointerId === touchCamera.id) touchCamera = null;
-  if (event.pointerType !== 'touch') dragging = false;
+for (const type of ['pointercancel', 'lostpointercapture']) renderer.domElement.addEventListener(type, event => {
+  if (event.pointerType === 'touch') touchCamera.end(event.pointerId, true);
+  else dragging = false;
 });
 window.addEventListener('wheel', event => {
   if (!started || !$('info').hidden || restCutscene) return;
@@ -1340,6 +1380,34 @@ window.addEventListener('resize', () => {
   if (restScene) { restScene.view.aspect = innerWidth / innerHeight; restScene.view.updateProjectionMatrix(); }
   renderer.setSize(innerWidth, innerHeight);
 });
+
+const skyDirection = new THREE.Vector3();
+const daytimeColor = new THREE.Color(0xc8916e), nighttimeColor = new THREE.Color(0x202c42);
+function updateSky() {
+  const sky = marsSky(state.sol, state.minutes);
+  const daylight = THREE.MathUtils.smoothstep(sky.sun.y, -0.07, 0.12);
+  const place = (object, direction, radius) => {
+    object.visible = direction.y > 0;
+    skyDirection.set(direction.x, direction.y, direction.z);
+    object.position.copy(camera.position).addScaledVector(skyDirection, skyDistance);
+    object.scale.setScalar(radius);
+  };
+  place(skySun, sky.sun, skyDistance * 0.00308);
+  place(skyPhobos, sky.phobos, skyDistance * sky.phobos.angularRadius);
+  place(skyDeimos, sky.deimos, Math.max(0.055, skyDistance * sky.deimos.angularRadius));
+  phobosMaterial.uniforms.sunDirection.value.set(sky.sun.x, sky.sun.y, sky.sun.z);
+  const deimosPhase = (1 - (sky.sun.x * sky.deimos.x + sky.sun.y * sky.deimos.y + sky.sun.z * sky.deimos.z)) / 2;
+  skyDeimos.material.color.setRGB(0.35 + 0.54 * deimosPhase, 0.33 + 0.51 * deimosPhase, 0.3 + 0.46 * deimosPhase);
+  nightSky.position.copy(camera.position);
+  starMaterial.opacity = 1 - daylight;
+  nightSky.visible = starMaterial.opacity > 0.01;
+  sun.position.set(sky.sun.x, sky.sun.y, sky.sun.z).multiplyScalar(50);
+  sun.intensity = 2.5 * daylight;
+  hemi.intensity = 0.45 + 1.65 * daylight;
+  scene.background.lerpColors(nighttimeColor, daytimeColor, daylight);
+  scene.fog.color.copy(scene.background);
+  $('scene').style.setProperty('--night-opacity', String(0.32 * (1 - daylight)));
+}
 
 let previous = performance.now();
 function frame(now) {
@@ -1508,13 +1576,6 @@ function frame(now) {
     previousNight = night;
     doorBeacon.visible = night;
     doorBeacon.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
-    nightSky.visible = night;
-    $('scene').style.setProperty('--night-opacity', night ? '0.32' : '0');
-    const lighting = night ? 0.32 : 1;
-    hemi.intensity = THREE.MathUtils.lerp(hemi.intensity, 2.1 * lighting, dt);
-    sun.intensity = THREE.MathUtils.lerp(sun.intensity, 2.5 * lighting, dt);
-    const bg = new THREE.Color(night ? 0x202c42 : 0xc8916e);
-    scene.background.lerp(bg, dt * 0.4); scene.fog.color.copy(scene.background);
     if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').classList.remove('show'); }
     updatePlots(); updateUI();
   }
@@ -1525,6 +1586,7 @@ function frame(now) {
   targetPoint.y += aimOffset;
   camera.position.lerp(cameraPoint, 0.08); camera.lookAt(targetPoint);
   camera.updateMatrixWorld();
+  updateSky();
   updateInteractionPrompt();
   animateSilo(now, dt);
   renderer.render(scene, camera);

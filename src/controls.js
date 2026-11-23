@@ -32,6 +32,44 @@ export function joystickVector(x, y, radius) {
   return { right: x * scale, forward: -y * scale };
 }
 
+export function createTouchCamera() {
+  const touches = new Map();
+  const distance = () => {
+    const [a, b] = touches.values();
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  return {
+    start(id, x, y) {
+      if (touches.has(id) || touches.size >= 2) return false;
+      if (touches.size) for (const touch of touches.values()) touch.moved = true;
+      touches.set(id, { x, y, startX: x, startY: y, moved: touches.size > 0 });
+      return true;
+    },
+    move(id, x, y) {
+      const touch = touches.get(id);
+      if (!touch) return null;
+      const previousDistance = touches.size === 2 ? distance() : 0;
+      const dx = x - touch.x, dy = y - touch.y;
+      touch.x = x; touch.y = y;
+      if (touches.size === 2) {
+        const nextDistance = distance();
+        return previousDistance > 0 && nextDistance > 0 ? { zoom: previousDistance / nextDistance } : null;
+      }
+      if (Math.hypot(x - touch.startX, y - touch.startY) > 8) touch.moved = true;
+      return touch.moved ? { dx, dy } : null;
+    },
+    end(id, cancelled = false) {
+      const touch = touches.get(id);
+      if (!touch) return false;
+      const tap = !cancelled && touches.size === 1 && !touch.moved;
+      touches.delete(id);
+      for (const remaining of touches.values()) remaining.moved = true;
+      return tap;
+    },
+    clear() { touches.clear(); }
+  };
+}
+
 export function wheelZoomDelta(deltaY, deltaMode, pinch) {
   const pixels = deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? 200 : 1);
   return Math.max(-1, Math.min(1, pixels * (pinch ? 0.05 : 0.025)));

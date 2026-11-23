@@ -15,7 +15,7 @@ A tracked machine swaps powered heads to prepare, plant and harvest potatoes in 
 **HOW TO PLAY**  
 **SCROLL TO READ ↓**
 
-Move with WASD or the joystick. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.
+Move with WASD or the joystick. Pinch the 3D view to zoom on touch devices. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.
 
 1. **Till · Tool 1**  
    Loosen the soil to give the potatoes room to grow.
@@ -52,6 +52,8 @@ This concept imagines a pressurized, climate-controlled greenhouse connected to 
 
 Recycled water, root-zone irrigation, supplemental lighting, power, and life support are essential dependencies. These are conceptual assumptions from the supplied research, not a validated Mars farming plan.
 
+Grow lights illuminate the rows inside the dome. The accelerated sky approximates an equinox on Mars: Phobos rises in the west and Deimos in the east. Moon positions are illustrative, not predictions for a real date; rest remains available from 19:00 to 06:00.
+
 Twenty plots and accelerated work keep this a short experience. The powered heads till, furrow and hill, bore planting holes, and lift the harvest; the sealed caddy protects their couplers from dust. Seed potatoes are stored beneath the caddy and planted by hand.
 
 Park the machine and use the switch on the white cabinet to run the sprinklers for five seconds after planting and again during tuber growth. Automatic watering between these two checkpoints represents recurring irrigation, not just two waterings for the season. Growth takes 30 seconds per plot, paused at checkpoints until the work is done; night rest advances it by up to 15 seconds.
@@ -64,7 +66,7 @@ On Earth, potatoes need consistent moisture, especially during tuber development
 
 The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.
 
-Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.
+Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, pinch the view to zoom, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.
 
 Link: **READ THE SUPPORTING RESEARCH ↗**
 
@@ -165,6 +167,8 @@ Mobile drawer: **TOOLS** or **SELECT TOOL**, followed by the current or required
 
 ## Habitat and controls
 
+Music: **MUSIC: ON**, **MUSIC: OFF**, **MUSIC: START**, **MUSIC: ERROR**; **Mute music** / **Play music** / **Music unavailable**. Error: **Music could not load. Open the app through a web server and check browser audio support.**
+
 Top bar: **FIELDWORK / 01**, **MARS SURFACE / AGRICULTURAL HABITAT**, **PARK TOOL** / **PICK UP TOOL**, **CONTROLS**, **?** (menu).
 
 Habitat panel: **HABITAT STATUS · LIVE**, **LOCAL TIME**, **{time}**, **SOL {number} · DAYTIME** / **NIGHTTIME**, **PRESSURIZED**, **LIFE SUPPORT · ONLINE**, **GROW LIGHTS · ONLINE**, **SURFACE GRAVITY · 0.38 G**.
@@ -176,7 +180,7 @@ Field controls: **FIELD CONTROLS · ALL DEVICES**, **W A S D · MOVE**, **SPACE 
 
 Esc opens the menu. F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q clockwise / E counterclockwise · I looks up, K looks down · trackpad pinch or scroll, mouse wheel, or + / − to zoom. Gamepad: B parks / picks up, A interacts.
 
-On-screen controls: **ON-SCREEN CONTROLS**, **Tap a direction to move; tap again to stop**, movement arrows, **WORK: OFF** / **WORK: ON**, camera orbit and tilt buttons, **+** and **−**. Touch controls: **MOVE**, **WORK**, **+**, **−**.
+On-screen controls: **ON-SCREEN CONTROLS**, **Tap a direction to move; tap again to stop**, movement arrows, **WORK: OFF** / **WORK: ON**, camera orbit and tilt buttons, **+** and **−**. Touch controls: **MOVE**, **WORK**.
 
 Debug controls: **SILO PREVIEW · POTATOES**, **Actual harvest**, **Clear to show actual harvest**, **Enter a whole number from 0 to 9007199254740991.**, **Hide interface** / **Show interface**.
 

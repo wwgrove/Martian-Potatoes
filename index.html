@@ -19,6 +19,8 @@
 <body>
   <main id="app">
     <div id="scene" aria-label="Interactive 3D view of the Martian greenhouse"></div>
+    <audio id="background-music" src="./assets/background-music.mp3" preload="metadata" loop></audio>
+    <div id="music-status" class="music-status" role="alert" hidden></div>
     <button id="debug-visibility" class="debug-visibility" type="button" aria-label="Hide interface" aria-pressed="false" title="Hide interface">◉</button>
     <div class="debug-silo panel">
       <label for="debug-silo-count">SILO PREVIEW · POTATOES</label>
@@ -29,7 +31,7 @@
     <div class="topbar">
       <a class="brand" href="./" aria-label="Fieldwork home"><span class="brand-mark">✳</span><span>FIELDWORK <small> / 01</small></span></a>
       <div class="top-center"><span class="status-dot"></span> MARS SURFACE <span class="slash">/</span> AGRICULTURAL HABITAT</div>
-      <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
+      <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button type="button" class="icon-button music-icon" data-music-toggle="icon" aria-label="Mute music" aria-pressed="true" title="Mute music">♫</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
     </div>
 
     <div class="mission-hud">
@@ -128,10 +130,6 @@
     <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
       <div id="joystick" class="joystick" aria-hidden="true"><div id="joystick-knob" class="joystick-knob"></div><span>MOVE</span></div>
       <div class="touch-actions">
-        <div class="touch-zoom" role="group" aria-label="Zoom">
-          <button data-camera="in" aria-label="Zoom in">+</button>
-          <button data-camera="out" aria-label="Zoom out">−</button>
-        </div>
         <button id="touch-work" aria-label="Hold to work" aria-pressed="false">WORK</button>
       </div>
     </div>
@@ -149,7 +147,7 @@
         <p>A tracked machine swaps powered heads to prepare, plant and harvest potatoes in a Martian habitat.</p>
         <div class="intro-plan-header"><strong>HOW TO PLAY</strong><span>SCROLL TO READ ↓</span></div>
         <div class="intro-plan" tabindex="0" role="region" aria-label="Game instructions, scroll down to read">
-          <p class="plan-intro">Move with WASD or the joystick. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.</p>
+          <p class="plan-intro">Move with WASD or the joystick. Pinch the 3D view to zoom on touch devices. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.</p>
           <ol class="plan-steps">
             <li><strong>1. Till · Tool 1</strong><p>Loosen the soil to give the potatoes room to grow.</p></li>
             <li><strong>2. Furrow · Tool 2</strong><p>Use the plow to open the planting rows.</p></li>
@@ -167,6 +165,7 @@
           <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
           <button type="button" class="reset-progress">RESET PROGRESS</button>
         </div>
+        <button type="button" class="intro-music" data-music-toggle="text" aria-label="Mute music" aria-pressed="true">MUSIC: ON</button>
         <small>TOUCH · MOUSE · KEYBOARD · GAMEPAD</small>
       </section>
     </div>
@@ -176,13 +175,14 @@
         <h2 id="info-title">A farm is a system.</h2>
         <p>This concept imagines a pressurized, climate-controlled greenhouse connected to a habitat. The growing medium is assumed to have already been treated for perchlorates and amended with nutrients; untreated Martian regolith is not ready for planting.</p>
         <p>Recycled water, root-zone irrigation, supplemental lighting, power, and life support are essential dependencies. These are conceptual assumptions from the supplied research, not a validated Mars farming plan.</p>
+        <p>Grow lights illuminate the rows inside the dome. The accelerated sky approximates an equinox on Mars: Phobos rises in the west and Deimos in the east. Moon positions are illustrative, not predictions for a real date; rest remains available from 19:00 to 06:00.</p>
         <p>Twenty plots and accelerated work keep this a short experience. The powered heads till, furrow and hill, bore planting holes, and lift the harvest; the sealed caddy protects their couplers from dust. Seed potatoes are stored beneath the caddy and planted by hand.</p>
         <p>Park the machine and use the switch on the white cabinet to run the sprinklers for five seconds after planting and again during tuber growth. Automatic watering between these two checkpoints represents recurring irrigation, not just two waterings for the season. Growth takes 30 seconds per plot, paused at checkpoints until the work is done; night rest advances it by up to 15 seconds.</p>
         <p>Progress saves automatically in this browser on this device. It does not sync between devices and may be removed if site data is cleared. The mission panel warns you if saving is unavailable.</p>
         <button type="button" class="reset-progress">RESET PROGRESS</button>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.</p>
-        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
+        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, pinch the view to zoom, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>
     </div>
