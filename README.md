@@ -11,9 +11,11 @@ To preview on a phone on the same Wi-Fi, start the server on all network interfa
 ## Controls
 
 - Background music loops automatically when allowed by the browser; otherwise it starts on the first interaction. The app's copy has its quiet ending trimmed to avoid a pause between loops. Use **Music** on the welcome screen or the music button in the top bar to mute or resume it.
+- Sound effects accompany the plow, auger, lifter, irrigation, tool attachment and seed pickup. Use **Sound effects** in Field Notes to mute them independently of the music for the current session. Audio starts after browser interaction; the supplied sound set does not include a tiller effect.
 - WASD: move the astronaut and tracked tool relative to the camera. W moves away from the camera; A / D move left / right in the view.
 - Arrow keys pan the camera across the ground; `C` recenters it on the astronaut.
 - Press `Escape` to open or close the Field Notes menu and pause the experience.
+- Supported phones and controllers provide optional haptic feedback for movement, attachments, fieldwork and irrigation. Turn it off in Field Notes for the current session. Vibration and controller rumble depend on browser, device and connection support; iOS browsers do not expose the standard web vibration API.
 - Right-drag to orbit; Q orbits clockwise, E counterclockwise, I looks up (including into the sky), and K looks down. Pinch or scroll on a trackpad, use the mouse wheel, or press `+` / `-` to zoom.
 - Click an eligible plot to target it from anywhere; otherwise the nearest eligible plot is selected automatically. A floating blue diamond marks the selected plot for every activity, even if the required attachment is not yet selected.
 - Click an attachment or press `1`, `2`, `3`, `4` to change it. Hover, focus or tap an attachment to learn its purpose. The astronaut opens the sealed tool caddy and exchanges the rotary tiller, furrowing and hilling plow, mixing auger, or vibratory lifter.

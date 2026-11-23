@@ -60,6 +60,12 @@ Park the machine and use the switch on the white cabinet to run the sprinklers f
 
 Progress saves automatically in this browser on this device. It does not sync between devices and may be removed if site data is cleared. The mission panel warns you if saving is unavailable.
 
+Optional haptic feedback responds to movement and fieldwork on supported phones and controllers. Availability depends on your browser and device; this setting lasts for this session.
+
+Button: **HAPTICS: ON** / **HAPTICS: OFF**
+
+Button: **SOUND EFFECTS: ON** / **SOUND EFFECTS: OFF**
+
 Button: **RESET PROGRESS**
 
 On Earth, potatoes need consistent moisture, especially during tuber development. The [University of Minnesota Extension](https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes) recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.
@@ -168,6 +174,8 @@ Mobile drawer: **TOOLS** or **SELECT TOOL**, followed by the current or required
 ## Habitat and controls
 
 Music: **MUSIC: ON**, **MUSIC: OFF**, **MUSIC: START**, **MUSIC: ERROR**; **Mute music** / **Play music** / **Music unavailable**. Error: **Music could not load. Open the app through a web server and check browser audio support.**
+
+Sound effects error: **Sound effects could not load. Check browser audio support and open the app through a web server.**
 
 Top bar: **FIELDWORK / 01**, **MARS SURFACE / AGRICULTURAL HABITAT**, **PARK TOOL** / **PICK UP TOOL**, **CONTROLS**, **?** (menu).
 

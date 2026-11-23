@@ -6,9 +6,27 @@ import { loadProgress, saveProgress, resetProgress } from './persistence.js';
 import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
 import { setupMusic } from './music.js';
 import { marsSky } from './sky.js';
+import { createHaptics } from './haptics.js';
+import { createSoundEffects } from './sound-effects.js';
 
 const $ = id => document.getElementById(id);
 setupMusic($('background-music'), document.querySelectorAll('[data-music-toggle]'), window, $('music-status'));
+const sounds = createSoundEffects(
+  () => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) throw new Error('Web Audio is not supported by this browser.');
+    return new AudioContext();
+  },
+  url => fetch(url),
+  error => {
+    console.error('Unable to play sound effects:', error);
+    $('sound-status').textContent = 'Sound effects could not load. Check browser audio support and open the app through a web server.';
+    $('sound-status').hidden = false;
+  }
+);
+window.addEventListener('pointerdown', sounds.unlock, true);
+window.addEventListener('keydown', sounds.unlock, true);
+const toolSounds = { furrow: 'plow', hill: 'plow', drill: 'drill', harvest: 'harvest' };
 let storage = null, saved = null, savingBlocked = false, saveFailed = false;
 try {
   storage = window.localStorage;
@@ -679,9 +697,12 @@ let restCutscene = null, restScene = null;
 let previousWorking = false, previousNight = false;
 const treadDistance = [0, 0];
 const keys = new Set();
-let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false;
+let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false, previousGamepadActive = false;
 let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null;
 const touchCamera = createTouchCamera();
+const haptics = createHaptics(navigator);
+window.addEventListener('pointerdown', event => haptics.setSource(event.pointerType === 'touch' ? 'touch' : null), true);
+window.addEventListener('keydown', () => haptics.setSource(null), true);
 const CAMERA_MIN_PITCH = -1.1, CAMERA_MAX_PITCH = 1.25;
 let cameraAngle = 0.38, cameraPitch = 0.45, cameraDistance = 11;
 let previousCameraAngle = cameraAngle;
@@ -892,6 +913,8 @@ function updateSwitch(dt) {
     carried[switching.to].visible = false;
     mounted[switching.to].visible = true;
     activeTool = switching.to;
+    haptics.trigger('attach', performance.now());
+    sounds.play('attach');
     updateToolUI();
     persistProgress();
   }
@@ -1108,6 +1131,8 @@ function setScreenWork(enabled) {
   $('touch-work').setAttribute('aria-pressed', String(enabled));
 }
 function clearInputs() {
+  haptics.stop();
+  sounds.stopAll();
   keys.clear(); dragging = false; touchCamera.clear(); touchWorkPointer = null; resetJoystick();
   $('touch-work').classList.remove('pressed');
   setScreenMove(null); setScreenWork(false); gamepadWorkReady = false; previousWorking = false;
@@ -1121,6 +1146,19 @@ $('debug-visibility').addEventListener('click', () => {
   clearInputs();
 });
 $('debug-silo-count').addEventListener('focus', clearInputs);
+$('haptics-toggle').addEventListener('click', event => {
+  const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+  haptics.setEnabled(enabled);
+  event.currentTarget.setAttribute('aria-pressed', String(enabled));
+  event.currentTarget.textContent = `HAPTICS: ${enabled ? 'ON' : 'OFF'}`;
+});
+$('sound-effects-toggle').addEventListener('click', event => {
+  const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+  sounds.setEnabled(enabled);
+  event.currentTarget.setAttribute('aria-pressed', String(enabled));
+  event.currentTarget.textContent = `SOUND EFFECTS: ${enabled ? 'ON' : 'OFF'}`;
+  if (enabled) sounds.unlock();
+});
 $('debug-silo-count').addEventListener('input', event => {
   const input = event.currentTarget;
   const value = input.valueAsNumber;
@@ -1162,6 +1200,7 @@ function toggleMachine() {
     message('Machine parked. Press F or the machine button near its handle to pick it up.');
   }
   updateToolUI();
+  haptics.trigger('attach', performance.now());
   persistProgress();
 }
 
@@ -1170,6 +1209,7 @@ function startIrrigation() {
   if (PHASES[state.phase]?.action !== 'water') { message('The sprinklers are only needed during an irrigation objective.'); return; }
   if (!canStartIrrigation(state)) { message('Wait until every plot is ready for its irrigation check.'); return; }
   irrigationRemaining = IRRIGATION_SECONDS;
+  haptics.trigger('irrigation', performance.now());
   setScreenWork(false);
   message(`Sprinklers on for ${IRRIGATION_SECONDS} seconds.`);
   persistProgress();
@@ -1373,7 +1413,7 @@ function requestRest() {
 }
 window.addEventListener('keyup', event => keys.delete(event.code), true);
 window.addEventListener('blur', clearInputs);
-window.addEventListener('pagehide', persistProgress);
+window.addEventListener('pagehide', () => { persistProgress(); clearInputs(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { persistProgress(); clearInputs(); } });
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -1414,7 +1454,15 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - previous) / 1000, 1); previous = now;
   if (document.hidden) return;
-  const gamepad = readGamepad(navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null);
+  const connectedGamepad = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null;
+  const gamepad = readGamepad(connectedGamepad);
+  haptics.setGamepad(connectedGamepad);
+  const gamepadActive = Boolean(gamepad.right || gamepad.forward || gamepad.orbit || gamepad.tilt || gamepad.buttons.some(Boolean));
+  if (gamepadActive) {
+    haptics.setSource('gamepad');
+    if (!previousGamepadActive) sounds.unlock();
+  }
+  previousGamepadActive = gamepadActive;
   if ($('reset-dialog').open) { gamepadWorkReady = false; previousGamepadButtons = gamepad.buttons; return; }
   const wasStarted = started;
   if (!gamepad.buttons[0]) gamepadWorkReady = true;
@@ -1433,12 +1481,14 @@ function frame(now) {
   previousGamepadButtons = gamepad.buttons;
   if (restCutscene) { if ($('info').hidden) updateRestCutscene(dt); return; }
   if (started && $('info').hidden) {
+    let hapticAction = null;
     const previousAstronautX = astronaut.position.x, previousAstronautZ = astronaut.position.z;
     elapsed += dt; advance(state, dt); updateSwitch(dt);
     if (irrigationRemaining > 0) {
       irrigationRemaining = Math.max(0, irrigationRemaining - dt);
       if (irrigationRemaining === 0) {
         completeIrrigation(state);
+        haptics.trigger('complete', now);
         message('Sprinklers stopped automatically. Irrigation complete.');
         persistProgress();
       }
@@ -1499,6 +1549,7 @@ function frame(now) {
       machine.position.y = parked ? 0 : Math.abs(Math.sin(elapsed * 10)) * 0.035;
       const travel = Math.hypot(movingObject.position.x - oldX, movingObject.position.z - oldZ);
       walkingDistance += travel;
+      if (travel > 0.00001) hapticAction = parked ? 'walk' : 'tracks';
       if (!parked) animateTracks(travel);
     } else machine.position.y = 0;
     if (!working) { workPhase = null; workRoute = null; }
@@ -1520,11 +1571,15 @@ function frame(now) {
       if (snap.elapsed <= snap.duration && (workSeconds < dt)) {
         rig.position.x = pose.x; rig.position.z = pose.z; rig.rotation.y = pose.angle;
         walkingDistance += travel + Math.abs(turn) * (MACHINE_OFFSET + 1.05);
+        if (travel > 0.00001 || Math.abs(turn) > 0.00001) hapticAction = 'tracks';
         animateTracks(travel, turn);
       }
+      const previousWork = work;
       work += workSeconds;
       const operating = snap.elapsed >= snap.duration;
+      if (operating && workSeconds > 0) hapticAction = phase.action;
       if (operating && phase.action === 'plant') {
+        if (previousWork < phase.duration * 0.4 && work >= phase.duration * 0.4) sounds.play('pickup');
         const oldX = astronaut.position.x, oldZ = astronaut.position.z;
         plantingActive = true; plantingPlot = currentTarget;
         plantPose = plantingPose(work / phase.duration);
@@ -1540,6 +1595,7 @@ function frame(now) {
       if (work >= phase.duration) {
         stopPlanting(false);
         completeWork(state, plot); work = 0; workTarget = null; snap = null; pinnedTarget = null; attachmentPivot.rotation.x = 0;
+        haptics.trigger('complete', now);
         persistProgress();
         mounted.sifter.userData.basket.position.y = 0;
         if (state.phase !== workPhase) setScreenWork(false);
@@ -1547,6 +1603,9 @@ function frame(now) {
         else message(state.phase !== PHASES.indexOf(phase) ? `Objective complete. Release Work, then ${PHASES[state.phase].title.toLowerCase()}.` : `Plot ${currentTarget + 1} complete.`);
       }
     } else { stopPlanting(true); work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0; mounted.sifter.userData.basket.position.y = 0; }
+    haptics.update(hapticAction, now);
+    sounds.setLoop('tool', toolSounds[hapticAction] || null);
+    sounds.setLoop('water', irrigationRemaining > 0 ? 'water' : null);
     rememberSafePosition();
     advanceGait(gait, walkingDistance, dt);
     astronaut.position.y = (parked ? 0.05 : 0) + gaitBodyOffset(gait) - 0.12 * plantBend;
