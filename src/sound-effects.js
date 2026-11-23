@@ -1,14 +1,39 @@
 const effects = {
-  drill: { file: 'Auger-Drill-Sound.mp3', start: 0.65, end: 2.85, volume: 1 },
-  attach: { file: 'Connecting-Tool-To-Body.mp3', start: 2.3, end: 2.65, volume: 1 },
-  pickup: { file: 'Pick-Up-Potato-Sound.mp3', start: 2.1, end: 2.4, volume: 1 },
-  plow: { file: 'Plow-Noise.mp3', start: 0.35, end: 1.9, volume: 0.7 },
-  harvest: { file: 'Sifter.mp3', start: 0.08, end: 1.1, volume: 1 },
+  tiller: { file: 'YTDown.com_YouTube_Media_gK0WqCwn5W0_Plow-Dragging-Soil-Sound-Effect_001_1080p.mp3', start: 0, end: 1.3, volume: 0.6 },
+  drill: { file: 'Auger-Drill-Sound.mp3', start: 0.65, end: 2.85, volume: 0.7 },
+  attach: { file: 'Connecting-Tool-To-Body.mp3', start: 2.3, end: 2.65, volume: 0.45 },
+  pickup: { file: 'Pick-Up-Potato-Sound.mp3', start: 2.1, end: 2.4, volume: 0.5 },
+  plow: { file: 'Plow-Noise.mp3', start: 0.35, end: 1.9, volume: 0.23 },
+  harvest: { file: 'Sifter.mp3', start: 0.08, end: 1.1, volume: 0.65 },
   water: { file: 'Watering-Noise.mp3', start: 0.05, end: 4.4, volume: 1.2 }
 };
 
+export const SOUND_VOLUME_KEY = 'martian-potatoes-sound-volumes-v1';
+
+function validateVolumes(volumes) {
+  if (!volumes || typeof volumes !== 'object' || Array.isArray(volumes) ||
+      Object.keys(volumes).length !== Object.keys(effects).length ||
+      Object.keys(effects).some(name => !Number.isFinite(volumes[name]) || volumes[name] < 0 || volumes[name] > 2)) {
+    throw new Error('Saved sound levels are invalid.');
+  }
+}
+
+export function loadSoundVolumes(storage) {
+  const raw = storage.getItem(SOUND_VOLUME_KEY);
+  if (raw === null) return null;
+  const volumes = JSON.parse(raw);
+  validateVolumes(volumes);
+  return volumes;
+}
+
+export function saveSoundVolumes(storage, volumes) {
+  validateVolumes(volumes);
+  storage.setItem(SOUND_VOLUME_KEY, JSON.stringify(volumes));
+}
+
 export function createSoundEffects(createContext, fetchAudio, reportError, now = () => performance.now()) {
   let context = null, enabled = true, contextFailed = false, resumePending = false, generation = 0;
+  const volumes = Object.fromEntries(Object.entries(effects).map(([name, effect]) => [name, effect.volume]));
   const buffers = new Map(), loops = new Map(), playing = new Map();
   function load(name) {
     if (!buffers.has(name)) {
@@ -32,12 +57,15 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
     }
     if (context.state !== 'running' && context.state !== 'closed' && !resumePending) {
       resumePending = true;
-      context.resume().then(() => { resumePending = false; }, error => { resumePending = false; reportError(error); });
+      context.resume().then(() => {
+        resumePending = false;
+        for (const [channel, entry] of loops) startLoop(channel, entry);
+      }, error => { resumePending = false; reportError(error); });
     }
   }
   function stopSource(source) {
     if (!source) return;
-    const gain = playing.get(source);
+    const { gain } = playing.get(source);
     playing.delete(source);
     source.onended = null;
     source.stop();
@@ -50,9 +78,9 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
     source.loop = loop;
     source.loopStart = effect.start;
     source.loopEnd = effect.end;
-    gain.gain.value = effect.volume;
+    gain.gain.value = volumes[name];
     source.connect(gain); gain.connect(context.destination);
-    playing.set(source, gain);
+    playing.set(source, { name, gain });
     source.onended = () => { playing.delete(source); source.disconnect(); gain.disconnect(); };
     if (loop) source.start(0, effect.start);
     else source.start(0, effect.start, effect.end - effect.start);
@@ -74,6 +102,15 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
   }
   return {
     unlock,
+    getVolumes() { return { ...volumes }; },
+    setVolume(name, value) {
+      if (!effects[name]) throw new RangeError(`Unknown sound effect: ${name}`);
+      if (!Number.isFinite(value) || value < 0 || value > 2) throw new RangeError('Sound volume must be between 0 and 2.');
+      volumes[name] = value;
+      for (const entry of playing.values()) {
+        if (entry.name === name) entry.gain.gain.value = value;
+      }
+    },
     setEnabled(value) { enabled = value; if (!enabled) stopAll(); },
     setLoop(channel, name) {
       const previous = loops.get(channel);

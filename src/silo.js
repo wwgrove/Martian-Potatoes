@@ -7,6 +7,13 @@ const LAYER_HEIGHT = 0.23;
 const FLOOR_CLEARANCE = 0.002, HEIGHT_VARIATION = 0.0125;
 export const SILO_CAPACITY = (Math.floor((SILO_HEIGHT - SILO_FLOOR_HEIGHT - FLOOR_CLEARANCE - 2 * SILO_POTATO_SCALE.z - HEIGHT_VARIATION) / LAYER_HEIGHT) + 1) * POTATOES_PER_LAYER;
 
+export function validateSiloPreview(value) {
+  if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
+    throw new RangeError('Silo preview must be a non-negative safe integer or null.');
+  }
+  return value;
+}
+
 function variation(index, salt) {
   let value = Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(salt, 0x85ebca6b);
   value = Math.imul(value ^ (value >>> 16), 0x7feb352d);

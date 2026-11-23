@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 131.74 78.13">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #232722;
+        mix-blend-mode: darken;
+        opacity: .97;
+      }
+
+      .cls-2 {
+        font-family: LiberationSans-Bold, 'Liberation Sans';
+        font-size: 9px;
+        font-weight: 700;
+      }
+
+      .cls-2, .cls-3, .cls-4, .cls-5, .cls-6, .cls-7 {
+        fill: #f7f7f7;
+      }
+
+      .cls-8 {
+        letter-spacing: -.07em;
+      }
+
+      .cls-3, .cls-4 {
+        font-size: 6.42px;
+      }
+
+      .cls-3, .cls-4, .cls-5, .cls-7 {
+        font-family: LiberationSans-Regular, 'Liberation Sans';
+      }
+
+      .cls-9 {
+        isolation: isolate;
+      }
+
+      .cls-4 {
+        letter-spacing: -.06em;
+      }
+
+      .cls-10 {
+        letter-spacing: -.02em;
+      }
+
+      .cls-11 {
+        fill: none;
+        stroke: #f7f7f7;
+        stroke-miterlimit: 10;
+        stroke-width: .18px;
+      }
+
+      .cls-5 {
+        font-size: 4px;
+      }
+
+      .cls-7 {
+        font-size: 5px;
+      }
+    </style>
+  </defs>
+  <g class="cls-9">
+    <g id="Layer_2" data-name="Layer 2">
+      <g id="Layer_1-2" data-name="Layer 1">
+        <rect class="cls-1" width="131.74" height="78.13" rx="6.31" ry="6.31"/>
+        <rect class="cls-11" x="12.58" y="7.85" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(14.52 15.44)"><tspan x="0" y="0">W</tspan></text>
+        <rect class="cls-11" x="12.58" y="34.02" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(15.59 41.61)"><tspan x="0" y="0">F</tspan></text>
+        <g>
+          <rect class="cls-11" x="13" y="47.11" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+          <text class="cls-5" transform="translate(13.93 53.23)"><tspan x="0" y="0">ESC</tspan></text>
+        </g>
+        <rect class="cls-11" x="12.58" y="20.94" width="21.52" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-7" transform="translate(15.05 27.7)"><tspan x="0" y="0">S</tspan><tspan class="cls-8" x="3.33" y="0">P</tspan><tspan x="6.3" y="0">ACE</tspan></text>
+        <rect class="cls-11" x="24.01" y="7.85" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-4" transform="translate(26.92 15.44)"><tspan x="0" y="0">A</tspan></text>
+        <rect class="cls-11" x="35.45" y="7.85" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(38.36 15.18)"><tspan x="0" y="0">S</tspan></text>
+        <rect class="cls-11" x="46.89" y="7.85" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(49.62 15.18)"><tspan x="0" y="0">D</tspan></text>
+        <text class="cls-2" transform="translate(61.05 16.52)"><tspan x="0" y="0">MOVE</tspan></text>
+        <rect class="cls-11" x="13" y="60.19" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(15.47 67.78)"><tspan x="0" y="0">Q</tspan></text>
+        <rect class="cls-11" x="24.43" y="60.19" width="10.09" height="10.09" rx="1.87" ry="1.87"/>
+        <text class="cls-3" transform="translate(27.34 67.78)"><tspan x="0" y="0">E</tspan></text>
+        <text class="cls-2" transform="translate(26.59 54.58)"><tspan x="0" y="0">MENU</tspan></text>
+        <text class="cls-2" transform="translate(48.14 68.99)"><tspan x="0" y="0">Pan Camera</tspan></text>
+        <text class="cls-2" transform="translate(26.6 42.58)"><tspan x="0" y="0">DRO</tspan><tspan class="cls-10" x="20" y="0">P</tspan><tspan x="25.84" y="0"> </tspan><tspan class="cls-10" x="28.34" y="0">T</tspan><tspan x="33.68" y="0">OO</tspan><tspan class="cls-10" x="47.68" y="0">L</tspan></text>
+        <text class="cls-2" transform="translate(38.52 29.22)"><tspan x="0" y="0">WORK / REST</tspan></text>
+        <g>
+          <path class="cls-6" d="M43.73,65.23h-3.93v-5.04C41.97,60.19,43.73,62.45,43.73,65.23Z"/>
+          <g>
+            <path class="cls-11" d="M43.73,65.23c0,2.79-1.76,5.05-3.93,5.05s-3.94-2.26-3.94-5.05,1.77-5.04,3.94-5.04S43.73,62.45,43.73,65.23Z"/>
+            <line class="cls-11" x1="39.8" y1="60.19" x2="39.8" y2="65.23"/>
+            <polyline class="cls-11" points="35.86 65.23 39.8 65.23 43.73 65.23"/>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

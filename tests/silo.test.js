@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SILO_CAPACITY, SILO_FLOOR_HEIGHT, SILO_HEIGHT, SILO_POTATO_SCALE, SILO_RADIUS, siloPotatoPose, siloFallOffset, siloRainStep } from '../src/silo.js';
+import { SILO_CAPACITY, SILO_FLOOR_HEIGHT, SILO_HEIGHT, SILO_POTATO_SCALE, SILO_RADIUS, validateSiloPreview, siloPotatoPose, siloFallOffset, siloRainStep } from '../src/silo.js';
 import { Object3D } from '../vendor/three.module.js';
+
+test('silo preview accepts non-negative safe integers and null to restore the harvest', () => {
+  assert.equal(validateSiloPreview(0), 0);
+  assert.equal(validateSiloPreview(Number.MAX_SAFE_INTEGER), Number.MAX_SAFE_INTEGER);
+  assert.equal(validateSiloPreview(null), null);
+  for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, '5', undefined]) {
+    assert.throws(() => validateSiloPreview(value), RangeError);
+  }
+});
 
 test('potato positions and orientations vary but remain stable and inside the silo', () => {
   const poses = Array.from({ length: 256 }, (_, index) => siloPotatoPose(index));

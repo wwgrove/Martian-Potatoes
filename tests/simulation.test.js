@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, isTillerRunning, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
 import { loadProgress, saveProgress, resetProgress, SAVE_KEY } from '../src/persistence.js';
 import { detachUpright, cameraTilt } from '../src/scene-helpers.js';
 import { Group, Scene, Vector3 } from '../vendor/three.module.js';
@@ -207,6 +207,23 @@ test('walking arms alternate opposite the legs and settle when stopped', () => {
   assert.ok(gaitArmSwing(gait, 1) < 0);
   advanceGait(gait, 0, 1);
   assert.ok(Math.abs(gaitArmSwing(gait, 0)) < 0.001);
+});
+
+test('tiller runs only while work is held with a mounted tiller and tillable ground remains', () => {
+  const state = createState();
+  const input = { working: true, parked: false, switching: null, activeTool: 'tiller' };
+  assert.equal(isTillerRunning(state, input), true);
+  assert.equal(isTillerRunning(state, { ...input, working: false }), false);
+  assert.equal(isTillerRunning(state, { ...input, parked: true }), false);
+  assert.equal(isTillerRunning(state, { ...input, switching: {} }), false);
+  assert.equal(isTillerRunning(state, { ...input, activeTool: 'plow' }), false);
+  for (const plot of state.plots.slice(0, -1)) completeWork(state, plot);
+  assert.equal(isTillerRunning(state, input), true);
+  completeWork(state, state.plots.at(-1));
+  assert.equal(isTillerRunning(state, input), false);
+  state.phase = PHASES.length;
+  startNextCycle(state);
+  assert.equal(isTillerRunning(state, input), true);
 });
 
 test('growth pauses at hilling and irrigation checks until each plot is serviced', () => {

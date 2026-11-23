@@ -266,6 +266,11 @@ export function canWork(state, plot, tool) {
   return plot.stage === state.phase;
 }
 
+export function isTillerRunning(state, { working, parked, switching, activeTool }) {
+  return working && !parked && !switching && activeTool === 'tiller'
+    && PHASES[state.phase]?.action === 'till' && state.plots.some(plot => canWork(state, plot, activeTool));
+}
+
 export function completeWork(state, plot) {
   if (state.phase === PHASES.length - 1) {
     plot.stage++;

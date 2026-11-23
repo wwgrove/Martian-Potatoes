@@ -1,13 +1,13 @@
 import * as THREE from '../vendor/three.module.js';
 import { detachUpright, cameraTilt } from './scene-helpers.js';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, completeWork, startNextCycle, phaseProgress } from './simulation.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
 import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
 import { loadProgress, saveProgress, resetProgress } from './persistence.js';
-import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
+import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, validateSiloPreview, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
 import { setupMusic } from './music.js';
 import { marsSky } from './sky.js';
 import { createHaptics } from './haptics.js';
-import { createSoundEffects } from './sound-effects.js';
+import { createSoundEffects, loadSoundVolumes, saveSoundVolumes } from './sound-effects.js';
 
 const $ = id => document.getElementById(id);
 setupMusic($('background-music'), document.querySelectorAll('[data-music-toggle]'), window, $('music-status'));
@@ -37,6 +37,71 @@ try {
   $('save-status').textContent = 'SAVE UNAVAILABLE · CHECK SITE STORAGE';
   $('save-status').classList.add('save-error');
 }
+let mixerStorage = null, mixerSavingBlocked = false, previewButton = null;
+try {
+  mixerStorage = window.localStorage;
+  const savedVolumes = loadSoundVolumes(mixerStorage);
+  if (savedVolumes) {
+    for (const [name, volume] of Object.entries(savedVolumes)) sounds.setVolume(name, volume);
+  }
+} catch (error) {
+  mixerSavingBlocked = true;
+  console.error('Unable to load sound levels:', error);
+  $('audio-mixer-status').textContent = 'Sound levels could not be loaded or saved. Check browser site storage.';
+  $('audio-mixer-status').classList.add('error-text');
+}
+function stopPreview() {
+  sounds.setLoop('preview', null);
+  if (previewButton) {
+    previewButton.setAttribute('aria-pressed', 'false');
+    previewButton.textContent = 'PREVIEW';
+    previewButton = null;
+  }
+}
+const soundLabels = {
+  tiller: 'Rotary tiller', drill: 'Auger', attach: 'Tool attachment',
+  pickup: 'Potato pickup', plow: 'Plow', harvest: 'Lifter', water: 'Irrigation'
+};
+for (const [name, volume] of Object.entries(sounds.getVolumes())) {
+  const row = document.createElement('div'), label = document.createElement('label');
+  const output = document.createElement('output'), slider = document.createElement('input');
+  const preview = document.createElement('button');
+  row.className = 'audio-mixer-row';
+  slider.type = 'range'; slider.min = '0'; slider.max = '200'; slider.step = '1';
+  slider.id = `sound-volume-${name}`; slider.value = String(Math.round(volume * 100));
+  label.htmlFor = slider.id; label.textContent = soundLabels[name];
+  output.setAttribute('for', slider.id); output.textContent = `${slider.value}%`;
+  preview.type = 'button'; preview.textContent = 'PREVIEW';
+  preview.setAttribute('aria-label', `Preview ${soundLabels[name]}`);
+  preview.setAttribute('aria-pressed', 'false');
+  slider.addEventListener('input', () => {
+    sounds.setVolume(name, slider.valueAsNumber / 100);
+    output.textContent = `${slider.value}%`;
+    if (mixerSavingBlocked) return;
+    try {
+      saveSoundVolumes(mixerStorage, sounds.getVolumes());
+      $('audio-mixer-status').textContent = 'Sound levels saved on this device.';
+      $('audio-mixer-status').classList.remove('error-text');
+    } catch (error) {
+      console.error('Unable to save sound levels:', error);
+      $('audio-mixer-status').textContent = 'Sound levels could not be saved. Check browser site storage.';
+      $('audio-mixer-status').classList.add('error-text');
+    }
+  });
+  preview.addEventListener('click', () => {
+    const wasPlaying = previewButton === preview;
+    stopPreview();
+    if (!wasPlaying) {
+      previewButton = preview;
+      preview.setAttribute('aria-pressed', 'true');
+      preview.textContent = 'STOP';
+      sounds.setLoop('preview', name);
+    }
+  });
+  row.append(label, output, slider, preview);
+  $('audio-mixer-controls').append(row);
+}
+$('audio-mixer').addEventListener('toggle', () => { if (!$('audio-mixer').open) stopPreview(); });
 const state = saved ? saved.state : createState();
 const gait = createGait();
 const scene = new THREE.Scene();
@@ -988,13 +1053,13 @@ function updateUI() {
   const watering = phase?.action === 'water';
   const progress = watering ? (irrigationRemaining > 0 ? 1 - irrigationRemaining / IRRIGATION_SECONDS : 0) : done / PLOT_COUNT;
   const progressPercent = Math.floor(progress * 100);
-  $('objective-count').textContent = watering ? `${progressPercent}% · FIELD` : `${done} / ${PLOT_COUNT} plots`;
+  $('objective-count').textContent = watering ? `Field watered: ${progressPercent}%` : `Plot completion: ${done}/${PLOT_COUNT}`;
   $('objective-progress').style.width = `${progress * 100}%`;
   $('progress-track').setAttribute('aria-valuenow', String(progressPercent));
   $('progress-track').setAttribute('aria-valuetext', watering ? `${progressPercent}% of field watering` : `${done} of ${PLOT_COUNT} plots`);
   $('objective').textContent = phase ? phase.title : 'Harvest complete';
   $('harvest-count').textContent = state.totalHarvested;
-  $('phase-number').textContent = phase ? `PHASE 0${state.phase + 1} / 0${PHASES.length}` : 'MISSION COMPLETE';
+  $('phase-number').textContent = phase ? `Objective [${String(state.phase + 1).padStart(2, '0')}/${String(PHASES.length).padStart(2, '0')}]` : 'Mission complete';
   $('phase-name').textContent = phase ? phase.name : 'WELL DONE';
   let instruction = parked ? 'Pick up the machine, then select the rotary tiller for the next crop.' : 'Select the rotary tiller to begin the next crop.';
   if (phase) {
@@ -1132,6 +1197,7 @@ function setScreenWork(enabled) {
 }
 function clearInputs() {
   haptics.stop();
+  stopPreview();
   sounds.stopAll();
   keys.clear(); dragging = false; touchCamera.clear(); touchWorkPointer = null; resetJoystick();
   $('touch-work').classList.remove('pressed');
@@ -1145,7 +1211,11 @@ $('debug-visibility').addEventListener('click', () => {
   $('debug-visibility').title = label;
   clearInputs();
 });
-$('debug-silo-count').addEventListener('focus', clearInputs);
+window.setSiloPreview = value => {
+  siloPreview = validateSiloPreview(value);
+  updateSilo(siloPreview === null ? state.totalHarvested : siloPreview);
+  return siloPreview;
+};
 $('haptics-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
   haptics.setEnabled(enabled);
@@ -1154,21 +1224,12 @@ $('haptics-toggle').addEventListener('click', event => {
 });
 $('sound-effects-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
+  if (!enabled) stopPreview();
   sounds.setEnabled(enabled);
+  $('audio-mixer-controls').querySelectorAll('button').forEach(button => { button.disabled = !enabled; });
   event.currentTarget.setAttribute('aria-pressed', String(enabled));
   event.currentTarget.textContent = `SOUND EFFECTS: ${enabled ? 'ON' : 'OFF'}`;
   if (enabled) sounds.unlock();
-});
-$('debug-silo-count').addEventListener('input', event => {
-  const input = event.currentTarget;
-  const value = input.valueAsNumber;
-  const valid = !input.validity.badInput && (input.value === '' || (Number.isSafeInteger(value) && value >= 0));
-  $('debug-silo-error').hidden = valid;
-  $('debug-silo-error').textContent = valid ? '' : 'Enter a whole number from 0 to 9007199254740991.';
-  input.setAttribute('aria-invalid', String(!valid));
-  if (!valid) return;
-  siloPreview = input.value === '' ? null : value;
-  updateSilo(siloPreview === null ? state.totalHarvested : siloPreview);
 });
 function toggleMachine() {
   if (!started || !$('info').hidden || restCutscene) return;
@@ -1215,7 +1276,12 @@ function startIrrigation() {
   persistProgress();
 }
 
+function setToolMenuOpen(open) {
+  $('tool-menu').parentElement.classList.toggle('tools-open', open);
+  $('tools-toggle').setAttribute('aria-expanded', String(open));
+}
 function setControlsVisible(visible) {
+  if (visible) setToolMenuOpen(false);
   $('screen-controls').hidden = !visible;
   $('touch-controls').hidden = visible;
   $('controls-button').setAttribute('aria-expanded', String(visible));
@@ -1252,8 +1318,9 @@ for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
 }
 $('touch-work').addEventListener('click', event => { if (event.detail === 0) setScreenWork(!screenWork); });
 $('tools-toggle').addEventListener('click', () => {
-  const open = $('tool-menu').parentElement.classList.toggle('tools-open');
-  $('tools-toggle').setAttribute('aria-expanded', String(open));
+  const open = $('tools-toggle').getAttribute('aria-expanded') !== 'true';
+  if (open && !$('screen-controls').hidden) setControlsVisible(false);
+  setToolMenuOpen(open);
 });
 $('machine-toggle').addEventListener('click', toggleMachine);
 $('controls-button').addEventListener('click', () => setControlsVisible($('screen-controls').hidden));
@@ -1274,7 +1341,7 @@ document.querySelectorAll('[data-camera]').forEach(button => button.addEventList
 if (saved) $('start-button').firstChild.textContent = 'RESUME THE MISSION ';
 $('start-button').addEventListener('click', () => { $('intro').hidden = true; started = true; message(saved ? 'Welcome back. Your progress has been restored.' : 'Welcome to the farm module. Follow your first objective.'); renderer.domElement.focus(); });
 $('info-button').addEventListener('click', () => { clearInputs(); $('info').hidden = false; $('close-info').focus(); });
-$('close-info').addEventListener('click', () => { $('info').hidden = true; $('info-button').focus(); });
+$('close-info').addEventListener('click', () => { stopPreview(); $('info').hidden = true; $('info-button').focus(); });
 let resetOpener = null;
 document.querySelectorAll('.reset-progress').forEach(button => button.addEventListener('click', () => {
   clearInputs();
@@ -1368,7 +1435,6 @@ window.addEventListener('wheel', event => {
   cameraDistance = THREE.MathUtils.clamp(cameraDistance + wheelZoomDelta(event.deltaY, event.deltaMode, event.ctrlKey), 7, 20);
 }, { passive: false });
 window.addEventListener('keydown', event => {
-  if (event.target === $('debug-silo-count')) return;
   if (event.code === 'Escape') {
     if ($('reset-dialog').open) {
       if (!event.repeat) { event.preventDefault(); $('reset-dialog').close(); }
@@ -1590,7 +1656,6 @@ function frame(now) {
       }
       attachmentPivot.rotation.x = operating && state.phase === 0 ? 0.08 * (1 + Math.sin(elapsed * 8)) : 0;
       if (operating && activeTool === 'auger') mounted.auger.userData.auger.rotation.y += workSeconds * 8;
-      if (operating && activeTool === 'tiller' && state.phase === 0) mounted.tiller.userData.roller.rotation.x -= workSeconds * 8;
       if (operating && activeTool === 'sifter' && state.phase === 7) mounted.sifter.userData.basket.position.y = Math.sin(elapsed * 40) * 0.025;
       if (work >= phase.duration) {
         stopPlanting(false);
@@ -1604,7 +1669,10 @@ function frame(now) {
       }
     } else { stopPlanting(true); work = 0; workTarget = null; snap = null; attachmentPivot.rotation.x = 0; mounted.sifter.userData.basket.position.y = 0; }
     haptics.update(hapticAction, now);
-    sounds.setLoop('tool', toolSounds[hapticAction] || null);
+    const tillerRunning = isTillerRunning(state, { working, parked, switching, activeTool });
+    if (tillerRunning) mounted.tiller.userData.roller.rotation.x -= dt * 8;
+    const toolSound = tillerRunning ? 'tiller' : toolSounds[hapticAction] || null;
+    sounds.setLoop('tool', toolSound);
     sounds.setLoop('water', irrigationRemaining > 0 ? 'water' : null);
     rememberSafePosition();
     advanceGait(gait, walkingDistance, dt);

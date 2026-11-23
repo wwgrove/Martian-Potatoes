@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111b1b">
-  <title>Fieldwork 01 — Martian Potatoes</title>
+  <title>Martian Potatoes</title>
   <link rel="stylesheet" href="./style.css">
   <style>
     .rest-cutscene{position:fixed;inset:0;z-index:4}
@@ -13,7 +13,7 @@
     .rest-caption span,.rest-caption strong{display:block;letter-spacing:.13em}
     .rest-caption span{font-size:10px;color:#e5a56d;margin-bottom:8px}
     .rest-caption strong{font-size:15px}
-    .resting .topbar,.resting .mission,.resting .environment,.resting .scene-label,.resting .target-label,.resting .interaction-prompt,.resting .toast,.resting .work-wrap,.resting .bottom,.resting .scale-note,.resting .screen-controls,.resting .touch-controls{visibility:hidden}
+    .resting .topbar,.resting .mission,.resting .controls,.resting .environment,.resting .scene-label,.resting .target-label,.resting .interaction-prompt,.resting .toast,.resting .work-wrap,.resting .bottom,.resting .scale-note,.resting .screen-controls,.resting .touch-controls,.resting .action-dock{visibility:hidden}
   </style>
 </head>
 <body>
@@ -23,33 +23,39 @@
     <div id="music-status" class="music-status" role="alert" hidden></div>
     <div id="sound-status" class="sound-status" role="alert" hidden></div>
     <button id="debug-visibility" class="debug-visibility" type="button" aria-label="Hide interface" aria-pressed="false" title="Hide interface">◉</button>
-    <div class="debug-silo panel">
-      <label for="debug-silo-count">SILO PREVIEW · POTATOES</label>
-      <input id="debug-silo-count" type="number" min="0" max="9007199254740991" step="1" inputmode="numeric" placeholder="Actual harvest" aria-describedby="debug-silo-hint debug-silo-error">
-      <small id="debug-silo-hint">Clear to show actual harvest</small>
-      <small id="debug-silo-error" role="alert" hidden></small>
-    </div>
     <div class="topbar">
-      <a class="brand" href="./" aria-label="Fieldwork home"><span class="brand-mark">✳</span><span>FIELDWORK <small> / 01</small></span></a>
       <div class="top-center"><span class="status-dot"></span> MARS SURFACE <span class="slash">/</span> AGRICULTURAL HABITAT</div>
-      <div class="top-actions"><button id="machine-toggle" class="controls-toggle" aria-pressed="false">PARK TOOL</button><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button type="button" class="icon-button music-icon" data-music-toggle="icon" aria-label="Mute music" aria-pressed="true" title="Mute music">♫</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
+      <div class="top-actions"><button id="controls-button" class="controls-toggle" aria-expanded="false" aria-controls="screen-controls">CONTROLS</button><button type="button" class="icon-button music-icon" data-music-toggle="icon" aria-label="Mute music" aria-pressed="true" title="Mute music">♫</button><button id="info-button" class="icon-button" aria-label="Open menu and field notes" title="Menu · Esc">?</button></div>
     </div>
 
     <div class="mission-hud">
     <section class="mission panel" aria-labelledby="mission-heading">
-      <div class="eyebrow"><span class="status-dot"></span> ACTIVE MISSION <span class="mission-id">01 / 01</span></div>
-      <div class="mission-title-row"><div><p class="kicker">THE FIRST HARVEST</p><h1 id="mission-heading">Growing potatoes<br>on Mars.</h1></div><span class="mission-icon">✳</span></div>
+      <div class="mission-title-row">
+        <div><p class="kicker">Next-Gen Hardware</p><h1 id="mission-heading">Growing<br>potatoes<br><strong>on Mars.</strong></h1></div>
+        <svg class="mission-emblem" viewBox="0 0 32 32" aria-hidden="true"><path d="M14.4 2.8 1.5 25.2c-.9 1.5.2 3.4 1.9 3.4h25.2c1.7 0 2.8-1.9 1.9-3.4L17.6 2.8a1.8 1.8 0 0 0-3.2 0Z" fill="#e7e1cf" stroke="#72859e" stroke-width=".8"/><path d="M10.7 13h10.6v6.8h-.9c-1.5 0-2.6 1.2-2.6 2.7v4h-3.6v-4c0-1.5-1.2-2.7-2.6-2.7h-.9Z" fill="#f5922f" stroke="#734a21" stroke-width=".8"/></svg>
+      </div>
       <p class="mission-copy">Prepare the soil, plant seed potatoes and bring in the harvest.</p>
       <div class="divider"></div>
-      <div class="objective-label">POTATO FARM <span id="objective-count">00 / 20 plots</span></div>
+      <div class="objective-label" id="phase-number">Objective [01/08]</div>
       <div id="mobile-clock" class="mobile-clock">SOL 01 · 08:00 · DAYTIME</div>
       <h2 id="objective">Loosen and mix the soil</h2>
       <p id="instruction">Move toward a blue-marked plot and hold SPACE to till.</p>
       <div id="progress-track" class="progress-track" role="progressbar" aria-label="Current objective progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="objective-progress"></div></div>
-      <div class="mission-footer"><span id="phase-number">PHASE 01 / 08</span><span id="phase-name">SOIL PREPARATION</span></div>
-      <div id="harvest-total" class="harvest-total" title="Each harvested plot counts as one potato in this simplified demo."><strong id="harvest-count">0</strong><span>POTATOES HARVESTED</span></div>
+      <div class="mission-footer"><span id="objective-count">Plot completion: 0/20</span><span id="phase-name">SOIL PREPARATION</span></div>
+      <div id="harvest-total" class="harvest-total" title="Each harvested plot counts as one potato in this simplified demo."><span>Potatoes harvested:</span><strong id="harvest-count">0</strong></div>
       <div id="save-status" class="save-status" role="status">AUTOSAVE ON · THIS DEVICE</div>
     </section>
+    <div class="controls panel">
+      <div class="controls-title">FIELD CONTROLS</div>
+      <div class="control-list">
+        <div><span class="control-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><strong>MOVE</strong></div>
+        <div><span class="control-keys"><kbd>SPACE</kbd></span><strong>WORK / REST</strong></div>
+        <div><span class="control-keys"><kbd>F</kbd></span><strong>PARK / PICK UP TOOL</strong></div>
+        <div><span class="control-keys"><kbd>ESC</kbd></span><strong>MENU</strong></div>
+        <div><span class="control-keys"><kbd>Q</kbd><kbd>E</kbd></span><strong>ORBIT CAMERA</strong></div>
+      </div>
+      <div class="control-tip">More controls in Field Notes</div>
+    </div>
     <div id="work-wrap" class="work-wrap" hidden>
       <div class="work-insight">
         <svg class="work-diagram" viewBox="0 0 90 76" aria-hidden="true">
@@ -87,12 +93,11 @@
     <div id="toast" class="toast" role="status"></div>
 
     <div class="bottom">
-      <div class="controls panel">
-        <div class="controls-title">FIELD CONTROLS <span>ALL DEVICES</span></div>
-        <div class="control-list"><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>SPACE</kbd><span>WORK / REST AT DOOR</span></div></div>
-        <div class="control-tip">Esc opens the menu. F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q clockwise / E counterclockwise · I looks up, K looks down · trackpad pinch or scroll, mouse wheel, or + / − to zoom. Gamepad: B parks / picks up, A interacts.</div>
-      </div>
       <div class="toolbox panel">
+        <div class="action-dock" role="group" aria-label="Machine actions">
+          <button id="machine-toggle" class="machine-action" aria-pressed="false">PARK TOOL</button>
+          <button id="touch-work" class="work-action" aria-label="Hold to work" aria-pressed="false">WORK</button>
+        </div>
         <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span id="tools-label">TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
         <div id="tool-menu" class="tool-menu">
         <div class="tools-header"><div><span class="eyebrow">SEALED PTO TOOL CADDY</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
@@ -130,9 +135,6 @@
     </div>
     <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
       <div id="joystick" class="joystick" aria-hidden="true"><div id="joystick-knob" class="joystick-knob"></div><span>MOVE</span></div>
-      <div class="touch-actions">
-        <button id="touch-work" aria-label="Hold to work" aria-pressed="false">WORK</button>
-      </div>
     </div>
     <div class="scale-note">CONCEPT DEMONSTRATION <span>·</span> TIME &amp; GROWTH ARE ACCELERATED</div>
 
@@ -142,7 +144,7 @@
     </div>
     <div id="intro" class="overlay">
       <section class="intro-card" role="dialog" aria-modal="true" aria-labelledby="intro-title">
-        <div class="intro-top"><span>FIELDWORK <b> / 01</b></span><span>CONCEPT EXPERIENCE</span></div>
+        <div class="intro-top"><span>NEXT-GEN <b>HARDWARE</b></span><span>CONCEPT EXPERIENCE</span></div>
         <p class="kicker">WELCOME TO THE FARM MODULE</p>
         <h2 id="intro-title">Grow potatoes on <em>Mars.</em></h2>
         <p>A tracked machine swaps powered heads to prepare, plant and harvest potatoes in a Martian habitat.</p>
@@ -174,6 +176,12 @@
       <section class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
         <div class="intro-top"><span>MENU <b> / FIELD NOTES · ESC TO CLOSE</b></span><button id="close-info" class="icon-button" aria-label="Close menu and field notes">×</button></div>
         <h2 id="info-title">A farm is a system.</h2>
+        <details id="audio-mixer" class="audio-mixer">
+          <summary>TEMPORARY SOUND MIXER</summary>
+          <p>Adjust each effect and use Preview to hear it with the music. Values are percentages of the original recording; 100% is its original level. Settings are saved on this device, even after resetting progress.</p>
+          <div id="audio-mixer-controls"></div>
+          <p id="audio-mixer-status" role="status">Adjustments save on this device.</p>
+        </details>
         <p>This concept imagines a pressurized, climate-controlled greenhouse connected to a habitat. The growing medium is assumed to have already been treated for perchlorates and amended with nutrients; untreated Martian regolith is not ready for planting.</p>
         <p>Recycled water, root-zone irrigation, supplemental lighting, power, and life support are essential dependencies. These are conceptual assumptions from the supplied research, not a validated Mars farming plan.</p>
         <p>Grow lights illuminate the rows inside the dome. The accelerated sky approximates an equinox on Mars: Phobos rises in the west and Deimos in the east. Moon positions are illustrative, not predictions for a real date; rest remains available from 19:00 to 06:00.</p>
