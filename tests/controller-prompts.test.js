@@ -24,6 +24,7 @@ test('controller prompts match the supported actions and distinguish brands', ()
   assert.equal(promptText('xbox', 'tools'), 'LB / RB');
   assert.equal(promptText('generic', 'work'), 'BOTTOM');
   assert.equal(promptText('keyboard', 'tools'), '1 / 2 / 3 / 4');
+  assert.deepEqual(promptButtons('touch', 'tools'), [['TAP TOOL', 'Tap an attachment']]);
   assert.equal(isFaceButton('playstation', 'work'), true);
   assert.equal(isFaceButton('xbox', 'park'), true);
   assert.equal(isFaceButton('keyboard', 'work'), false);

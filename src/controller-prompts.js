@@ -15,7 +15,7 @@ const buttons = {
   touch: {
     move: [['⊙ MOVE', 'Move joystick']], work: [['● WORK', 'Work button']], park: [['● PARK', 'Park tool button']],
     menu: [['☰ MENU', 'Menu button']], orbit: [['↔ SWIPE', 'Swipe to orbit']],
-    tools: [['☰ TOOLS', 'Tools button']], zoom: [['⇔ PINCH', 'Pinch to zoom']]
+    tools: [['TAP TOOL', 'Tap an attachment']], zoom: [['⇔ PINCH', 'Pinch to zoom']]
   },
   playstation: {
     move: [['L STICK', 'Left stick']], work: [['×', 'Cross button']], park: [['○', 'Circle button']],

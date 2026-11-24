@@ -32,7 +32,7 @@ export function saveSoundVolumes(storage, volumes) {
 }
 
 export function createSoundEffects(createContext, fetchAudio, reportError, now = () => performance.now()) {
-  let context = null, enabled = true, contextFailed = false, resumePending = false, generation = 0;
+  let context = null, enabled = true, contextFailed = false, generation = 0, resumeRequest = 0;
   const volumes = Object.fromEntries(Object.entries(effects).map(([name, effect]) => [name, effect.volume]));
   const buffers = new Map(), loops = new Map(), playing = new Map();
   function load(name) {
@@ -55,12 +55,11 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
       catch (error) { contextFailed = true; reportError(error); return; }
       for (const name of Object.keys(effects)) load(name);
     }
-    if (context.state !== 'running' && context.state !== 'closed' && !resumePending) {
-      resumePending = true;
+    if (context.state !== 'running' && context.state !== 'closed') {
+      const request = ++resumeRequest;
       context.resume().then(() => {
-        resumePending = false;
         for (const [channel, entry] of loops) startLoop(channel, entry);
-      }, error => { resumePending = false; reportError(error); });
+      }, error => { if (request === resumeRequest && context.state !== 'running') reportError(error); });
     }
   }
   function stopSource(source) {

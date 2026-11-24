@@ -117,6 +117,27 @@ test('a preview requested while audio resumes starts once and does not outlive c
   assert.equal(sources.length, 1);
 });
 
+test('a later interaction can resume audio even if an earlier resume is still pending', async () => {
+  const { sounds, sources, context, errors } = harness();
+  let attempts = 0, rejectFirst;
+  context.state = 'suspended';
+  context.resume = () => {
+    attempts++;
+    if (attempts === 1) return new Promise((resolve, reject) => { rejectFirst = reject; });
+    context.state = 'running';
+    return Promise.resolve();
+  };
+  sounds.setLoop('tool', 'tiller');
+  sounds.unlock();
+  await settle();
+  rejectFirst(new Error('Earlier resume was blocked'));
+  await settle();
+  assert.equal(attempts, 2);
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].loop, true);
+  assert.equal(errors.length, 0);
+});
+
 test('stale loading cannot start a stopped loop or interrupted one-shot', async () => {
   let release;
   const pending = new Promise(resolve => { release = resolve; });

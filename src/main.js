@@ -27,8 +27,24 @@ const sounds = createSoundEffects(
     $('sound-status').hidden = false;
   }
 );
-window.addEventListener('pointerdown', sounds.unlock, true);
-window.addEventListener('keydown', sounds.unlock, true);
+let audioSessionErrorReported = false, soundEffectsEnabled = true;
+function unlockSoundEffects() {
+  if (!soundEffectsEnabled) return;
+  try {
+    if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback';
+  } catch (error) {
+    if (!audioSessionErrorReported) {
+      audioSessionErrorReported = true;
+      console.error('Unable to configure sound effects output:', error);
+      $('sound-status').textContent = 'Sound effects output could not be configured. Check your device volume and silent mode.';
+      $('sound-status').hidden = false;
+    }
+  }
+  sounds.unlock();
+}
+window.addEventListener('pointerdown', unlockSoundEffects, true);
+window.addEventListener('touchend', unlockSoundEffects, { capture: true, passive: true });
+window.addEventListener('keydown', unlockSoundEffects, true);
 const toolSounds = { furrow: 'plow', hill: 'plow', drill: 'drill', harvest: 'harvest' };
 let storage = null, saved = null, savingBlocked = false, saveFailed = false;
 try {
@@ -339,7 +355,10 @@ domeGround.rotation.x = -Math.PI / 2;
 domeGround.position.y = 0.08;
 scene.add(domeGround);
 const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat.glass);
-dome.position.y = 0.06; scene.add(dome);
+dome.position.y = 0.06;
+// Transparent soil must be drawn before the glass regardless of camera position.
+dome.renderOrder = 1;
+scene.add(dome);
 const ribMat = material(0x899f90);
 for (let i = 0; i < 8; i++) {
   const points = [];
@@ -744,30 +763,38 @@ for (const type of toolTypes) {
 }
 
 const astronaut = new THREE.Group(); astronaut.position.set(0, 0, 1.05); rig.add(astronaut);
-// Rounded, segmented pressure suit with separate hip, knee, shoulder and elbow joints.
-sphere(astronaut, mat.suit, 0, 1.29, 0, 0.39, 0.51, 0.27);
-sphere(astronaut, mat.suitDark, 0, 0.99, 0, 0.34, 0.2, 0.25);
-box(astronaut, mat.suitDark, 0, 1.37, 0.27, 0.64, 0.7, 0.34);
-box(astronaut, mat.white, 0, 1.38, 0.45, 0.56, 0.61, 0.08);
-box(astronaut, mat.orange, 0, 1.59, 0.5, 0.42, 0.055, 0.025);
-box(astronaut, mat.darkSteel, 0, 1.24, 0.5, 0.36, 0.2, 0.025);
+const suitFabric = material(0xcbb89b), suitOrange = material(0xb9683a);
+const suitTrim = material(0x655b4d), suitGlove = material(0x64865a);
+const suitSkin = material(0xd5ad8b);
+const helmetGlass = material(0xc8e1d5, { transparent: true, opacity: 0.2, roughness: 0.18, depthWrite: false });
+sphere(astronaut, suitFabric, 0, 1.29, 0, 0.34, 0.48, 0.235);
+sphere(astronaut, suitOrange, 0, 1.29, -0.07, 0.25, 0.44, 0.19);
+sphere(astronaut, suitOrange, 0, 0.99, 0, 0.3, 0.17, 0.22);
+box(astronaut, suitTrim, 0, 1.37, 0.235, 0.49, 0.56, 0.19);
+box(astronaut, suitFabric, 0, 1.38, 0.345, 0.4, 0.45, 0.04);
+box(astronaut, suitOrange, 0, 1.53, 0.37, 0.3, 0.035, 0.025);
 for (const x of [-0.19, 0.19]) {
-  rod(astronaut, mat.suitDark, [x, 1.72, 0.3], [x, 1.02, 0.31], 0.055);
-  box(astronaut, mat.orange, x, 1.15, 0.52, 0.08, 0.04, 0.03);
+  rod(astronaut, suitTrim, [x, 1.68, 0.2], [x, 1.04, 0.24], 0.035);
 }
-box(astronaut, mat.suitDark, 0, 1.34, -0.255, 0.4, 0.31, 0.06);
-box(astronaut, mat.orange, 0, 1.43, -0.295, 0.29, 0.045, 0.025);
-for (const x of [-0.12, 0, 0.12]) sphere(astronaut, mat.blue, x, 1.32, -0.3, 0.03, 0.03, 0.02);
-const collar = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.045, 8, 24), mat.darkSteel);
+box(astronaut, suitFabric, 0, 1.32, -0.259, 0.025, 0.55, 0.025);
+box(astronaut, suitTrim, 0, 1.03, 0, 0.64, 0.1, 0.44);
+box(astronaut, mat.steel, 0, 1.03, -0.23, 0.12, 0.08, 0.035);
+for (const x of [-0.28, 0.28]) box(astronaut, suitTrim, x, 0.99, -0.12, 0.12, 0.17, 0.14);
+box(astronaut, mat.blue, -0.14, 1.49, -0.246, 0.095, 0.075, 0.025);
+box(astronaut, suitFabric, 0.14, 1.49, -0.246, 0.1, 0.055, 0.025);
+const collar = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.038, 8, 24), suitTrim);
 collar.rotation.x = Math.PI / 2; collar.position.y = 1.73; astronaut.add(collar);
 const helmet = new THREE.Group(); helmet.name = 'helmet'; astronaut.add(helmet);
-sphere(helmet, mat.white, 0, 1.99, 0, 0.36, 0.39, 0.35);
-sphere(helmet, mat.darkSteel, 0, 2.02, -0.27, 0.3, 0.265, 0.12);
-sphere(helmet, mat.visor, 0, 2.03, -0.335, 0.265, 0.225, 0.07);
-sphere(helmet, mat.blue, -0.12, 2.12, -0.395, 0.075, 0.035, 0.008);
+sphere(helmet, suitFabric, 0, 1.99, 0.035, 0.245, 0.28, 0.22);
+sphere(helmet, suitSkin, 0, 2.02, -0.12, 0.19, 0.21, 0.12);
+for (const x of [-0.07, 0.07]) sphere(helmet, mat.black, x, 2.07, -0.226, 0.018, 0.02, 0.012);
+sphere(helmet, suitTrim, 0, 1.94, -0.215, 0.145, 0.11, 0.08);
+sphere(helmet, mat.darkSteel, 0, 1.92, -0.286, 0.065, 0.065, 0.035);
 for (const side of [-1, 1]) {
-  sphere(helmet, mat.orange, side * 0.34, 2, 0, 0.045, 0.065, 0.07);
+  sphere(helmet, mat.darkSteel, side * 0.13, 1.94, -0.25, 0.055, 0.055, 0.035);
 }
+const helmetShell = sphere(helmet, helmetGlass, 0, 2.01, 0, 0.32, 0.35, 0.32);
+helmetShell.renderOrder = 2;
 const upperBody = new THREE.Group(); upperBody.position.y = 0.96;
 for (const part of [...astronaut.children]) {
   part.position.y -= upperBody.position.y;
@@ -776,35 +803,35 @@ for (const part of [...astronaut.children]) {
 astronaut.add(upperBody);
 function makeLeg(side) {
   const hip = new THREE.Group(); hip.position.set(side * 0.2, 0.96, 0); astronaut.add(hip);
-  sphere(hip, mat.suitDark, 0, 0, 0, 0.16, 0.16, 0.16);
-  rod(hip, mat.suit, [0, -0.03, 0], [0, -0.36, 0], 0.145);
+  sphere(hip, suitOrange, 0, 0, 0, 0.145, 0.15, 0.145);
+  rod(hip, suitOrange, [0, -0.03, 0], [0, -0.36, 0], 0.13);
+  box(hip, suitFabric, side * 0.1, -0.2, 0, 0.07, 0.29, 0.21);
   const knee = new THREE.Group(); knee.position.set(0, -0.4, 0); hip.add(knee);
-  sphere(knee, mat.suitDark, 0, 0, 0, 0.145, 0.13, 0.15);
-  sphere(knee, mat.white, 0, 0, -0.105, 0.12, 0.1, 0.07);
-  rod(knee, mat.suit, [0, -0.04, 0], [0, -0.36, 0], 0.12);
-  sphere(knee, mat.suitDark, 0, -0.35, 0, 0.13, 0.07, 0.13);
+  sphere(knee, suitTrim, 0, 0, 0, 0.14, 0.13, 0.145);
+  sphere(knee, suitFabric, 0, 0, -0.105, 0.105, 0.09, 0.06);
+  rod(knee, suitFabric, [0, -0.04, 0], [0, -0.36, 0], 0.11);
+  sphere(knee, suitOrange, 0, -0.35, 0, 0.12, 0.06, 0.12);
   const foot = new THREE.Group(); foot.position.y = -0.35; knee.add(foot);
-  sphere(foot, mat.black, 0, -0.09, -0.085, 0.16, 0.1, 0.245);
+  sphere(foot, suitTrim, 0, -0.09, -0.085, 0.14, 0.1, 0.22);
   return { hip, knee, foot };
 }
 const legs = [makeLeg(-1), makeLeg(1)];
 const arms = [];
 for (const side of [-1, 1]) {
   const arm = new THREE.Group(); arm.position.set(side * 0.37, 1.53 - upperBody.position.y, 0); upperBody.add(arm);
-  sphere(arm, mat.white, 0, 0, 0, 0.16, 0.16, 0.16);
-  rod(arm, mat.suit, [0, -0.03, 0], [side * 0.09, -0.2, -0.22], 0.115);
-  sphere(arm, mat.suitDark, side * 0.09, -0.2, -0.22, 0.12, 0.12, 0.12);
-  sphere(arm, mat.white, side * 0.13, -0.2, -0.22, 0.065, 0.09, 0.09);
-  rod(arm, mat.suit, [side * 0.09, -0.2, -0.22], [side * -0.03, 0.16, -0.3], 0.1);
+  sphere(arm, suitOrange, 0, 0, 0, 0.14, 0.14, 0.14);
+  rod(arm, suitFabric, [0, -0.03, 0], [side * 0.09, -0.2, -0.22], 0.105);
+  sphere(arm, suitTrim, side * 0.09, -0.2, -0.22, 0.11, 0.11, 0.11);
+  rod(arm, suitFabric, [side * 0.09, -0.2, -0.22], [side * -0.03, 0.16, -0.3], 0.09);
   const hand = new THREE.Group(); hand.position.set(side * -0.03, 0.19, -0.3); arm.add(hand);
-  sphere(hand, mat.darkSteel, 0, -0.03, 0, 0.105, 0.07, 0.105);
-  sphere(hand, mat.white, 0, 0, 0, 0.11, 0.1, 0.12);
+  sphere(hand, suitTrim, 0, -0.03, 0, 0.1, 0.07, 0.1);
+  sphere(hand, suitGlove, 0, 0, 0, 0.1, 0.09, 0.11);
   const walkingArm = new THREE.Group(); walkingArm.position.copy(arm.position); upperBody.add(walkingArm);
-  sphere(walkingArm, mat.white, 0, 0, 0, 0.16, 0.16, 0.16);
-  rod(walkingArm, mat.suit, [0, -0.04, 0], [side * 0.06, -0.32, 0], 0.115);
-  sphere(walkingArm, mat.suitDark, side * 0.06, -0.32, 0, 0.12, 0.12, 0.12);
-  rod(walkingArm, mat.suit, [side * 0.06, -0.32, 0], [side * 0.08, -0.58, -0.05], 0.1);
-  sphere(walkingArm, mat.white, side * 0.08, -0.6, -0.05, 0.11, 0.1, 0.12);
+  sphere(walkingArm, suitOrange, 0, 0, 0, 0.14, 0.14, 0.14);
+  rod(walkingArm, suitFabric, [0, -0.04, 0], [side * 0.06, -0.32, 0], 0.105);
+  sphere(walkingArm, suitTrim, side * 0.06, -0.32, 0, 0.11, 0.11, 0.11);
+  rod(walkingArm, suitFabric, [side * 0.06, -0.32, 0], [side * 0.08, -0.58, -0.05], 0.09);
+  sphere(walkingArm, suitGlove, side * 0.08, -0.6, -0.05, 0.1, 0.09, 0.11);
   walkingArm.visible = false;
   arms.push({ arm, hand, walkingArm });
 }
@@ -820,7 +847,7 @@ if (parked) {
 }
 let irrigationRemaining = saved && saved.irrigation ? saved.irrigation : 0;
 
-let activeTool = saved ? saved.tool : 'tiller', switching = null, started = false, currentTarget = null, pinnedTarget = null;
+let activeTool = saved ? saved.tool : 'tiller', switching = null, queuedTool = null, started = false, currentTarget = null, pinnedTarget = null;
 let work = 0, workTarget = null, workPhase = null, workRoute = null, snap = null, toastTimer = 0, elapsed = 0;
 let plantingActive = false, plantingPlot = null, plantReturn = null, plantBend = 0, plantPose = null;
 let saveTimer = 0;
@@ -947,9 +974,6 @@ function createRestScene() {
   const suit = astronaut.clone(true); suit.position.set(0, 0, 0); suit.rotation.set(0, 0, 0); interior.add(suit);
   const suitHelmet = suit.getObjectByName('helmet');
   const suitHelmetY = suitHelmet.position.y;
-  sphere(suit, skin, 0, 1.99, 0, 0.22, 0.27, 0.21);
-  sphere(suit, hair, 0, 2.18, 0.02, 0.22, 0.09, 0.21);
-  for (const x of [-0.07, 0.07]) sphere(suit, mat.black, x, 2.02, -0.19, 0.022, 0.025, 0.015);
   return { interior, view, door, person, restLegs, restArms, suit, suitHelmet, suitHelmetY };
 }
 
@@ -1012,7 +1036,12 @@ function message(text) {
   $('toast').textContent = text; $('toast').classList.add('show'); toastTimer = 3.5;
 }
 function selectTool(type) {
-  if (!started || switching || restCutscene) return;
+  if (!started || restCutscene) return;
+  if (switching) {
+    queuedTool = type === switching.to ? null : type;
+    message(queuedTool ? `Next attachment: ${toolLabels[queuedTool]}.` : `Changing attachment: ${toolLabels[switching.to]}.`);
+    return;
+  }
   if (parked) { message('Pick up the machine before changing attachments.'); return; }
   if (plantingActive || plantReturn) { message('Finish planting or release Work before changing attachments.'); return; }
   const nextCycle = state.phase === PHASES.length && type === 'tiller';
@@ -1076,7 +1105,11 @@ function updateSwitch(dt) {
     const inCase = type === switching.from ? t >= 1.8 : type === switching.to ? t < 1.8 : true;
     stored[type].visible = lidPivot.rotation.z > 0.4 && inCase;
   }
-  if (t >= 3.5) { astronaut.position.x = 0; astronaut.position.z = 1.05; astronaut.rotation.y = 0; lidPivot.rotation.z = 0; switching = null; }
+  if (t >= 3.5) {
+    astronaut.position.x = 0; astronaut.position.z = 1.05; astronaut.rotation.y = 0; lidPivot.rotation.z = 0; switching = null;
+    const nextTool = queuedTool; queuedTool = null;
+    if (nextTool) selectTool(nextTool);
+  }
 }
 const toolLabels = { tiller: '01 · Rotary tiller', plow: '02 · Hilling plow', auger: '03 · Mixing auger', sifter: '04 · Vibratory lifter' };
 let lastToolHintPhase = -1;
@@ -1322,11 +1355,12 @@ $('haptics-toggle').addEventListener('click', event => {
 $('sound-effects-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
   if (!enabled) stopPreview();
+  soundEffectsEnabled = enabled;
   sounds.setEnabled(enabled);
   $('audio-mixer-controls').querySelectorAll('button').forEach(button => { button.disabled = !enabled; });
   event.currentTarget.setAttribute('aria-pressed', String(enabled));
   event.currentTarget.textContent = `SOUND EFFECTS: ${enabled ? 'ON' : 'OFF'}`;
-  if (enabled) sounds.unlock();
+  if (enabled) unlockSoundEffects();
 });
 function toggleMachine() {
   if (!started || !$('info').hidden || restCutscene) return;
@@ -1377,8 +1411,16 @@ function setToolMenuOpen(open) {
   $('tool-menu').parentElement.classList.toggle('tools-open', open);
   $('tools-toggle').setAttribute('aria-expanded', String(open));
 }
+$('work-guide-toggle').addEventListener('click', event => {
+  const expanded = event.currentTarget.getAttribute('aria-expanded') !== 'true';
+  $('work-wrap').classList.toggle('guide-expanded', expanded);
+  event.currentTarget.setAttribute('aria-expanded', String(expanded));
+  event.currentTarget.setAttribute('aria-label', expanded ? 'Hide field guide details' : 'Show field guide details');
+  event.currentTarget.textContent = expanded ? 'LESS' : 'MORE';
+});
 function setControlsVisible(visible) {
   if (visible) setToolMenuOpen(false);
+  $('tool-menu').parentElement.classList.toggle('controls-open', visible);
   $('screen-controls').hidden = !visible;
   $('touch-controls').hidden = visible;
   $('controls-button').setAttribute('aria-expanded', String(visible));
@@ -1478,7 +1520,7 @@ document.querySelectorAll('.tool').forEach(button => {
     if (document.activeElement !== button) $('tool-description').hidden = true;
   });
   button.addEventListener('blur', () => { $('tool-description').hidden = true; });
-  button.addEventListener('click', () => { showDescription(); selectTool(button.dataset.tool); });
+  button.addEventListener('click', () => { showDescription(); selectTool(button.dataset.tool); setToolMenuOpen(false); });
 });
 renderer.domElement.tabIndex = 0;
 renderer.domElement.addEventListener('contextmenu', event => event.preventDefault());
@@ -1631,7 +1673,7 @@ function frame(now) {
     haptics.setSource('gamepad');
     if (!previousGamepadActive || gamepad.buttons.some((pressed, index) => pressed && !previousGamepadButtons[index])) {
       setPromptMode(controllerType(connectedGamepad));
-      sounds.unlock();
+      unlockSoundEffects();
     }
   }
   previousGamepadActive = gamepadActive;
