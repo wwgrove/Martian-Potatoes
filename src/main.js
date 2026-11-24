@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
-import { detachUpright, cameraTilt } from './scene-helpers.js';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
+import { detachUpright, cameraTilt, createDottedGuide } from './scene-helpers.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, MACHINE_PICKUP_REACH, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
 import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
 import { controllerType, promptButtons, promptText, isFaceButton, updateControllerPrompts } from './controller-prompts.js';
 import { createGamepadMenu } from './gamepad-menu.js';
@@ -10,6 +10,7 @@ import { setupMusic } from './music.js';
 import { marsSky } from './sky.js';
 import { createHaptics } from './haptics.js';
 import { createSoundEffects, loadSoundVolumes, saveSoundVolumes } from './sound-effects.js';
+import { TERRAIN_WIDTH, TERRAIN_SEGMENTS, terrainHeight } from './terrain.js';
 
 const $ = id => document.getElementById(id);
 setupMusic($('background-music'), document.querySelectorAll('[data-music-toggle]'), window, $('music-status'));
@@ -108,7 +109,7 @@ const state = saved ? saved.state : createState();
 const gait = createGait();
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xc8916e);
-scene.fog = new THREE.Fog(0xc8916e, 28, 72);
+scene.fog = new THREE.Fog(0xc8916e, 45, 80);
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
@@ -135,7 +136,7 @@ const mat = {
   darkSteel: material(0x6a7770), white: material(0xe5e2ce), suit: material(0xcdd4c7),
   suitDark: material(0x8d9f95), visor: material(0x304f50, { metalness: 0.35, roughness: 0.3 }),
   red: material(0xc76c49), dirt: material(0x76513b), soil: material(0x503d30),
-  worked: material(0x211710), sand: material(0xb96f50), floor: material(0xa58e74),
+  worked: material(0x211710), floor: material(0xa58e74),
   green: material(0x719765), leaf: material(0x67965e), leafLight: material(0x9abb7d),
   cream: material(0xe7dcbf), potato: material(0xc69b65), light: new THREE.MeshBasicMaterial({ color: 0xffe5a7 }),
   blue: material(0x799f9e), glass: new THREE.MeshBasicMaterial({ color: 0xb9d6c6, transparent: true, opacity: 0.095, side: THREE.DoubleSide, depthWrite: false })
@@ -166,18 +167,25 @@ function rod(parent, m, a, b, radius) {
   parent.add(mesh); return mesh;
 }
 
-// Mars, habitat shell, and a deliberately low-poly landscape.
-box(scene, mat.sand, 0, -0.5, 0, 120, 0.8, 120);
-const hills = [material(0xa9674d), material(0x955c49), material(0xb57958), material(0x845447)];
-for (let i = 0; i < 17; i++) {
-  const angle = i / 17 * Math.PI * 2;
-  const radius = 2.5 + (i * 7 % 5), height = 2 + (i * 11 % 6);
-  const geometry = i % 3 === 0 ? new THREE.CylinderGeometry(radius * 0.65, radius, height, 5) : new THREE.ConeGeometry(radius, height, 4 + i % 4);
-  const rock = new THREE.Mesh(geometry, hills[i % hills.length]);
-  const distance = 25 + i % 4 * 3;
-  rock.position.set(Math.sin(angle) * distance, height * 0.36 - 0.5, Math.cos(angle) * distance);
-  rock.rotation.y = i * 0.73; rock.scale.z = 0.6 + (i % 3) * 0.3; scene.add(rock);
+const terrainRenderWidth = TERRAIN_WIDTH * 1.5;
+const terrainRenderSegments = TERRAIN_SEGMENTS * 1.5;
+const terrainGeometry = new THREE.PlaneGeometry(terrainRenderWidth, terrainRenderWidth, terrainRenderSegments, terrainRenderSegments);
+const terrainVertices = terrainGeometry.attributes.position, terrainUVs = terrainGeometry.attributes.uv;
+for (let i = 0; i < terrainVertices.count; i++) {
+  const x = terrainVertices.getX(i), y = terrainVertices.getY(i);
+  terrainVertices.setZ(i, terrainHeight(x, -y));
+  terrainUVs.setXY(i, x / TERRAIN_WIDTH + 0.5, y / TERRAIN_WIDTH + 0.5);
 }
+terrainGeometry.computeVertexNormals();
+const terrainTexture = new THREE.TextureLoader().load('assets/jezero-ctx.png', undefined, undefined, error => {
+  console.error('Unable to load Jezero terrain imagery:', error);
+  $('error').textContent = 'The Jezero terrain image could not load. Check the local assets and reload.';
+  $('error').hidden = false;
+});
+terrainTexture.colorSpace = THREE.SRGBColorSpace;
+const terrain = new THREE.Mesh(terrainGeometry, material(0xd7ae99, { map: terrainTexture }));
+terrain.rotation.x = -Math.PI / 2;
+scene.add(terrain);
 const nightSky = new THREE.Group(); scene.add(nightSky);
 const starMaterial = new THREE.MeshBasicMaterial({ color: 0xe7ede6, transparent: true, fog: false });
 for (let i = 0; i < 120; i++) {
@@ -211,11 +219,12 @@ function random() {
   randomSeed = (randomSeed * 1664525 + 1013904223) >>> 0;
   return randomSeed / 4294967296;
 }
-const exteriorRocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x9e624a), 300);
+const exteriorRocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x987263), 300);
 const instanceTransform = new THREE.Object3D();
 for (let i = 0; i < exteriorRocks.count; i++) {
   const angle = random() * Math.PI * 2, radius = 11 + random() * 18, size = 0.08 + random() * 0.42;
-  instanceTransform.position.set(Math.cos(angle) * radius, -0.07 + size * 0.25, Math.sin(angle) * radius);
+  const x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
+  instanceTransform.position.set(x, terrainHeight(x, z) + size * 0.25, z);
   instanceTransform.scale.set(size, size * (0.25 + random() * 0.5), size * (0.6 + random()));
   instanceTransform.rotation.set(random(), random() * Math.PI, random());
   instanceTransform.updateMatrix(); exteriorRocks.setMatrixAt(i, instanceTransform.matrix);
@@ -347,8 +356,10 @@ for (const side of [-1, 1]) {
 box(scene, mat.orange, WATER_SWITCH.x + 0.04, 1.15, WATER_SWITCH.z, 0.1, 0.28, 0.34);
 box(scene, mat.cream, WATER_SWITCH.x + 0.1, 1.15, WATER_SWITCH.z, 0.05, 0.14, 0.16);
 const switchBeacon = new THREE.Group(); switchBeacon.position.set(WATER_SWITCH.x + 0.5, 2.2, WATER_SWITCH.z); scene.add(switchBeacon);
-const switchDiamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), material(0x169bff, { emissive: 0x1265b8, emissiveIntensity: 0.9 }));
+const switchDiamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.26), material(0x169bff, { emissive: 0x1265b8, emissiveIntensity: 0.9 }));
 switchBeacon.add(switchDiamond); switchBeacon.visible = false;
+const objectiveGuide = createDottedGuide(scene);
+const guideDestination = new THREE.Vector3();
 
 const plots = [];
 const soilDetails = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x715741), PLOT_COUNT * 24);
@@ -779,6 +790,7 @@ const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const targetPoint = new THREE.Vector3(), cameraPoint = new THREE.Vector3(), viewDirection = new THREE.Vector3();
 const interactionPosition = new THREE.Vector3(), interactionProjection = new THREE.Vector3(), astronautWorld = new THREE.Vector3();
 const coarsePointer = window.matchMedia('(pointer: coarse)');
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const isGamepadMode = type => type !== 'keyboard' && type !== 'touch';
 function setPromptMode(type) {
   if (!isGamepadMode(type)) lastNonGamepadType = type;
@@ -1153,7 +1165,7 @@ function updateInteractionPrompt() {
     else { action = irrigationRemaining > 0 ? 'WAIT FOR SPRINKLERS' : 'REST AVAILABLE AT 19:00'; }
   } else if (parked) {
     rig.localToWorld(interactionPosition.set(0, 0, 1.05));
-    if (Math.hypot(astronaut.position.x - interactionPosition.x, astronaut.position.z - interactionPosition.z) <= 1.4) {
+    if (Math.hypot(astronaut.position.x - interactionPosition.x, astronaut.position.z - interactionPosition.z) <= MACHINE_PICKUP_REACH) {
       interactionPosition.y += 1.7;
       key = 'F'; action = 'PICK UP MACHINE'; alternative = 'PICK UP TOOL';
     }
@@ -1275,7 +1287,7 @@ function toggleMachine() {
   }
   if (parked) {
     const handle = rig.localToWorld(new THREE.Vector3(0, 0, 1.05));
-    if (Math.hypot(astronaut.position.x - handle.x, astronaut.position.z - handle.z) > 1.4) {
+    if (Math.hypot(astronaut.position.x - handle.x, astronaut.position.z - handle.z) > MACHINE_PICKUP_REACH) {
       message('Return to the machine handle to pick it up.');
       return;
     }
@@ -1614,9 +1626,6 @@ function frame(now) {
     }
     spray.visible = irrigationRemaining > 0;
     if (spray.visible) updateSpray(elapsed);
-    switchBeacon.visible = PHASES[state.phase]?.action === 'water' && irrigationRemaining === 0;
-    switchDiamond.rotation.y = elapsed * 2;
-    switchBeacon.position.y = 2.2 + Math.sin(elapsed * 2.5) * 0.1;
     if (plantReturn) {
       plantReturn.time = Math.min(0.6, plantReturn.time + dt);
       const progress = THREE.MathUtils.smoothstep(plantReturn.time, 0, 0.6);
@@ -1750,6 +1759,18 @@ function frame(now) {
       arms[1].hand.getWorldPosition(seedHandPosition);
       rig.worldToLocal(seedHandPosition);
       carriedSeed.position.copy(seedHandPosition).lerp(seedGroundPosition, plantPose.drop);
+    }
+    switchBeacon.visible = PHASES[state.phase]?.action === 'water' && irrigationRemaining === 0;
+    switchDiamond.rotation.y = elapsed * 2;
+    switchBeacon.position.y = 2.2 + Math.sin(elapsed * 2.5) * 0.1;
+    astronaut.getWorldPosition(astronautWorld);
+    if (switchBeacon.visible) {
+      objectiveGuide.update(astronautWorld, switchBeacon.position, reducedMotion.matches ? 0 : elapsed,
+        !nearWaterSwitch(astronautWorld));
+    } else {
+      rig.localToWorld(guideDestination.set(0, 0, 1.05));
+      objectiveGuide.update(astronautWorld, guideDestination, reducedMotion.matches ? 0 : elapsed,
+        shouldGuideToMachine(state, parked, astronautWorld, guideDestination));
     }
     const night = isNight(state.minutes);
     if (night && !previousNight) message(`Nightfall: approach the habitat door and press ${promptText(currentControllerType, 'work')} or Work to rest.`);

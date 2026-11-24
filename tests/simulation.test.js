@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, isTillerRunning, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
 import { loadProgress, saveProgress, resetProgress, SAVE_KEY } from '../src/persistence.js';
-import { detachUpright, cameraTilt } from '../src/scene-helpers.js';
-import { Group, Scene, Vector3 } from '../vendor/three.module.js';
+import { detachUpright, cameraTilt, createDottedGuide } from '../src/scene-helpers.js';
+import { Group, Matrix4, Scene, Vector3 } from '../vendor/three.module.js';
 
 test('movement follows the camera after orbiting, including diagonals', () => {
   for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.73]) {
@@ -40,6 +40,56 @@ test('camera tilts above the horizon without moving its orbit below the ground',
   const sky = cameraTilt(-1.1, distance);
   assert.equal(sky.orbitPitch, 0.3);
   assert.ok(sky.aimOffset > horizon.aimOffset && Number.isFinite(sky.aimOffset));
+});
+
+test('watering guide forms a floating dotted route that follows the player and flows toward the station', () => {
+  const scene = new Scene(), guide = createDottedGuide(scene);
+  const start = new Vector3(0, 0, 0), end = new Vector3(-8, 2, 0), matrix = new Matrix4();
+  const point = index => {
+    guide.dots.getMatrixAt(index, matrix);
+    return new Vector3().setFromMatrixPosition(matrix);
+  };
+  assert.equal(guide.dots.visible, false);
+  guide.update(start, end, 0, true);
+  assert.equal(guide.dots.visible, true);
+  assert.equal(guide.dots.count, 20);
+  assert.ok(point(0).distanceTo(new Vector3(0, 1.15, 0)) < 1e-6);
+  assert.ok(point(10).y > point(0).y);
+  assert.ok(point(19).x < -7.5 && point(19).x > end.x);
+  guide.update(start, end, 0.25, true);
+  assert.ok(point(0).x < -0.1);
+  start.set(2, 0, 3);
+  guide.update(start, end, 0, true);
+  assert.ok(point(0).distanceTo(new Vector3(2, 1.15, 3)) < 1e-6);
+  guide.update(start, end, 0, false);
+  assert.equal(guide.dots.visible, false);
+  guide.update(end, end, 0, true);
+  assert.equal(guide.dots.visible, false);
+});
+
+test('the parked machine guide appears only when field work is ready and the handle is out of reach', () => {
+  const state = createState(), astronaut = { x: 4, z: 0 }, handle = { x: 0, z: 0 };
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), true);
+  assert.equal(shouldGuideToMachine(state, false, astronaut, handle), false);
+  assert.equal(shouldGuideToMachine(state, true, { x: 1.4, z: 0 }, handle), false);
+  state.phase = 3;
+  state.plots.forEach(plot => { plot.stage = 3; });
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), true);
+  state.phase = 4;
+  state.plots.forEach(plot => { plot.stage = 4; });
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), false);
+  state.phase = 5;
+  state.plots.forEach(plot => { plot.stage = 5; plot.growth = 0; });
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), false);
+  state.plots[0].growth = GROW_SECONDS / 4;
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), true);
+  state.phase = 7;
+  state.plots.forEach(plot => { plot.stage = 7; plot.growth = GROW_SECONDS - 1; });
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), false);
+  state.plots[0].growth = GROW_SECONDS;
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), true);
+  state.phase = PHASES.length;
+  assert.equal(shouldGuideToMachine(state, true, astronaut, handle), false);
 });
 
 test('detaching at any heading preserves an upright astronaut that can turn correctly', () => {

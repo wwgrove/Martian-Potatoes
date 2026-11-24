@@ -6,6 +6,7 @@ export const REST_GROWTH_SECONDS = 15;
 export const REST_DOOR = { x: 0, z: -9.05, reach: 2.5 };
 export const MOVEMENT_RADIUS = 7.7;
 export const WALK_RADIUS = 8.9;
+export const MACHINE_PICKUP_REACH = 1.4;
 export const WATER_SWITCH = { x: -8.15, z: -2, reach: 1.65 };
 export const IRRIGATION_SECONDS = 5;
 export const TOOL_TYPES = ['tiller', 'plow', 'auger', 'sifter'];
@@ -264,6 +265,12 @@ export function canWork(state, plot, tool) {
   if (state.phase === 5) return plot.stage === 5 && plot.growth >= GROW_SECONDS / 4;
   if (state.phase === PHASES.length - 1) return plot.stage === state.phase && plot.growth >= GROW_SECONDS;
   return plot.stage === state.phase;
+}
+
+export function shouldGuideToMachine(state, parked, astronaut, handle) {
+  const phase = PHASES[state.phase];
+  return Boolean(parked && phase && Math.hypot(astronaut.x - handle.x, astronaut.z - handle.z) > MACHINE_PICKUP_REACH
+    && state.plots.some(plot => canWork(state, plot, phase.tool)));
 }
 
 export function isTillerRunning(state, { working, parked, switching, activeTool }) {
