@@ -15,7 +15,9 @@ A tracked machine swaps powered heads to prepare, plant and harvest potatoes in 
 **HOW TO PLAY**  
 **SCROLL TO READ ↓**
 
-Move with WASD or the joystick. Pinch the 3D view to zoom on touch devices. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.
+Move with WASD or the touch joystick. Orbit with Q E and zoom with + −. Hold Space or Work to follow blue markers and work plots; release after each objective. Use 1 2 3 4 to change tools.
+
+Prompts switch to the most recently used keyboard/mouse, touch, or standard gamepad input. In the opening menu, field notes, and reset confirmation, the left stick or D-pad selects controls, the bottom face button activates them, the right face button goes back, and the right stick scrolls.
 
 1. **Till · Tool 1**  
    Loosen the soil to give the potatoes room to grow.
@@ -72,7 +74,7 @@ On Earth, potatoes need consistent moisture, especially during tuber development
 
 The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.
 
-Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, pinch the view to zoom, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.
+Hold Space or Work to approach and service eligible plots; release and press again after an objective completes. Use F or Park Tool to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space or Work to start irrigation. At night, use the same control at the habitat door to rest. Change attachments with 1 2 3 4, orbit with Q E, and zoom with + −. On touch devices, drag the joystick to move, swipe the view to orbit, pinch to zoom, tap a plot to target it and hold Work. Open Controls for alternative on-screen buttons. Keyboard users can also use arrows to pan, C to recenter, I and K to tilt, and the mouse wheel or trackpad to zoom. A gamepad D-pad also moves. Hover, focus or tap an attachment for its purpose.
 
 Link: **READ THE SUPPORTING RESEARCH ↗**
 
@@ -187,7 +189,7 @@ Habitat panel: **HABITAT STATUS · LIVE**, **LOCAL TIME**, **{time}**, **SOL {nu
 Scene label: **GROVEWARE MARTIAN FARMING FACILITY · 18.44° N 77.45° E**  
 Footer: **CONCEPT DEMONSTRATION · TIME & GROWTH ARE ACCELERATED**
 
-Field controls: **FIELD CONTROLS · ALL DEVICES**, **W A S D · MOVE**, **SPACE · WORK / REST AT DOOR**.
+Field controls: **FIELD CONTROLS**, **W A S D · MOVE**, **SPACE · WORK / REST**, **F · PARK / PICK UP TOOL**, **ESC · MENU**, **Q E · ORBIT CAMERA**, **1 2 3 4 · CHANGE TOOL**. Prompts switch to PlayStation, Xbox, or generic gamepad labels when a standard controller is detected.
 
 Esc opens the menu. F parks or picks up the machine. At the white cabinet, press Space to start irrigation. At night, press Space at the habitat door to rest. Arrow keys pan, C recenters · right-drag or Q clockwise / E counterclockwise · I looks up, K looks down · trackpad pinch or scroll, mouse wheel, or + / − to zoom. Gamepad: B parks / picks up, A interacts.
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from '../src/controls.js';
+import { cameraRelativeMovement } from '../src/simulation.js';
 
 test('system shortcuts release held keys and stray repeats cannot restart movement', () => {
   const keys = new Set();
@@ -27,7 +28,7 @@ test('gamepad input applies a deadzone and supports the D-pad', () => {
   buttons[12].pressed = true;
   buttons[15].pressed = true;
   const input = readGamepad({ axes: [0.1, -0.5, 0.6, -0.1], buttons });
-  assert.equal(input.right, 1);
+  assert.equal(input.right, 1.1);
   assert.equal(input.forward, 1.5);
   assert.equal(input.orbit, 0.6);
   assert.equal(input.tilt, 0);
@@ -42,6 +43,36 @@ test('a disconnected gamepad releases all controls', () => {
   assert.equal(input.forward, 0);
   assert.equal(input.orbit, 0);
   assert.equal(input.buttons.some(Boolean), false);
+});
+
+test('gamepad movement preserves analog direction and magnitude around the full stick', () => {
+  for (const magnitude of [0.21, 0.5, 1]) {
+    for (let degrees = 0; degrees < 360; degrees += 5) {
+      const angle = degrees * Math.PI / 180;
+      const x = magnitude * Math.cos(angle), y = magnitude * Math.sin(angle);
+      const input = readGamepad({ axes: [x, y], buttons: [] });
+      assert.ok(Math.abs(input.right - x) < 1e-10);
+      assert.ok(Math.abs(input.forward + y) < 1e-10);
+      const direction = cameraRelativeMovement(input.right, input.forward, 0);
+      assert.ok(Math.abs(direction.x * magnitude - x) < 1e-10);
+      assert.ok(Math.abs(direction.z * magnitude - y) < 1e-10);
+      assert.ok(Math.abs(Math.hypot(input.right, input.forward) - magnitude) < 1e-10);
+    }
+  }
+});
+
+test('gamepad movement uses a radial deadzone without suppressing the D-pad', () => {
+  const buttons = Array.from({ length: 16 }, () => ({ pressed: false }));
+  const resting = readGamepad({ axes: [0.12, -0.12], buttons });
+  assert.equal(resting.right, 0);
+  assert.equal(resting.forward, 0);
+  buttons[15].pressed = true;
+  const input = readGamepad({ axes: [0.12, -0.12], buttons });
+  assert.equal(input.right, 1);
+  assert.equal(input.forward, 0);
+  const diagonal = readGamepad({ axes: [0.15, -0.15], buttons: [] });
+  assert.equal(diagonal.right, 0.15);
+  assert.equal(diagonal.forward, 0.15);
 });
 
 test('joystick deadzone, direction and maximum travel', () => {

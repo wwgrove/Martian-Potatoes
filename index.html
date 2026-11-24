@@ -55,11 +55,12 @@
     <div class="controls panel">
       <div class="controls-title">FIELD CONTROLS</div>
       <div class="control-list">
-        <div><span class="control-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><strong>MOVE</strong></div>
-        <div><span class="control-keys"><kbd>SPACE</kbd></span><strong>WORK / REST</strong></div>
-        <div><span class="control-keys"><kbd>F</kbd></span><strong>PARK / PICK UP TOOL</strong></div>
-        <div><span class="control-keys"><kbd>ESC</kbd></span><strong>MENU</strong></div>
-        <div><span class="control-keys"><kbd>Q</kbd><kbd>E</kbd></span><strong>ORBIT CAMERA</strong></div>
+        <div><span class="control-keys" data-control-prompt="move"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><strong>MOVE</strong></div>
+        <div><span class="control-keys" data-control-prompt="work"><kbd>SPACE</kbd></span><strong>WORK / REST</strong></div>
+        <div><span class="control-keys" data-control-prompt="park"><kbd>F</kbd></span><strong>PARK / PICK UP TOOL</strong></div>
+        <div><span class="control-keys" data-control-prompt="menu"><kbd>ESC</kbd></span><strong>MENU</strong></div>
+        <div><span class="control-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span><strong>ORBIT CAMERA</strong></div>
+        <div><span class="control-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><strong>CHANGE TOOL</strong></div>
       </div>
       <div class="control-tip">More controls in Field Notes</div>
     </div>
@@ -107,7 +108,7 @@
         </div>
         <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span id="tools-label">TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
         <div id="tool-menu" class="tool-menu">
-        <div class="tools-header"><div><span class="eyebrow">Space Shovel 001</span><h2>Choose your attachment</h2></div><span class="scroll-hint">1 / 2 / 3 / 4 TO SWITCH</span></div>
+        <div class="tools-header"><div><span class="eyebrow">Space Shovel 001</span><h2>Choose your attachment</h2></div><span class="scroll-hint"><span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span> TO SWITCH</span></div>
         <div class="tools">
           <button class="tool active" data-tool="tiller" data-description="Counter-rotating curved tines loosen compacted regolith into an airy seedbed without pushing the tracked machine forward." aria-describedby="tool-description" aria-pressed="true"><span class="tool-number">01</span><span class="tool-symbol">✣</span><span><b>Rotary tiller</b><small>LOOSEN SOIL</small></span><kbd>1</kbd></button>
           <button class="tool" data-tool="plow" data-description="Adjustable wings open planting furrows and later hill soil around shoots, protecting tubers from light." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">⌄</span><span><b>Hilling plow</b><small>FURROW &amp; HILL</small></span><kbd>2</kbd></button>
@@ -156,19 +157,20 @@
         <h2 id="intro-title">Grow potatoes on <em>Mars.</em></h2>
         <p>A tracked machine swaps powered heads to prepare, plant and harvest potatoes in a Martian habitat.</p>
         <div class="intro-plan-header"><strong>HOW TO PLAY</strong><span>SCROLL TO READ ↓</span></div>
+        <div class="gamepad-menu-help" data-gamepad-help hidden>LEFT STICK / D-PAD: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK: SCROLL</div>
         <div class="intro-plan" tabindex="0" role="region" aria-label="Game instructions, scroll down to read">
-          <p class="plan-intro">Move with WASD or the joystick. Pinch the 3D view to zoom on touch devices. Hold Space or Work to follow blue markers and work plots; release after each objective. Select the numbered tools as you progress.</p>
+          <p class="plan-intro">Move with <span class="inline-keys" data-control-prompt="move"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span data-touch-alternative> or the touch joystick</span>. Orbit with <span class="inline-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span> and zoom with <span class="inline-keys" data-control-prompt="zoom"><kbd>+</kbd><kbd>−</kbd></span>. Hold <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span><span data-touch-alternative> or Work</span> to follow blue markers and work plots; release after each objective. Use <span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span> to change tools.</p>
           <ol class="plan-steps">
             <li><strong>1. Till · Tool 1</strong><p>Loosen the soil to give the potatoes room to grow.</p></li>
             <li><strong>2. Furrow · Tool 2</strong><p>Use the plow to open the planting rows.</p></li>
             <li><strong>3. Drill · Tool 3</strong><p>Use the auger to make holes for the seed potatoes.</p></li>
             <li><strong>4. Plant by hand</strong><p>Work each plot to take a seed potato from the machine's bin and plant it.</p></li>
-            <li><strong>5. Water</strong><p>Park the machine with F or Park tool. Walk to the white cabinet and press Space or Work at its switch.</p></li>
+            <li><strong>5. Water</strong><p>Park the machine with <span class="inline-keys" data-control-prompt="park"><kbd>F</kbd></span><span data-touch-alternative> or Park tool</span>. Walk to the white cabinet and press <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span><span data-touch-alternative> or Work</span> at its switch.</p></li>
             <li><strong>6. Hill · Tool 2 again</strong><p>Pick up the machine and select the plow again. Mound soil over the shoots to protect the potatoes from light.</p></li>
             <li><strong>7. Water again</strong><p>Park the machine and use the cabinet switch when the growing tubers are ready.</p></li>
             <li><strong>8. Harvest · Tool 4</strong><p>Pick up the machine and use the lifter to harvest. Select the tiller to start another crop; your total is kept.</p></li>
           </ol>
-          <p class="plan-intro">At night, approach the habitat door and press Space or Work to rest and speed up growth.</p>
+          <p class="plan-intro">At night, approach the habitat door and press <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span><span data-touch-alternative> or Work</span> to rest and speed up growth.</p>
           <p class="intro-note">This concept demonstration uses accelerated time and growth; its environment and farming systems are imagined.</p>
         </div>
         <div class="intro-actions">
@@ -181,7 +183,8 @@
     </div>
     <div id="info" class="overlay" hidden>
       <section class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
-        <div class="intro-top"><span>MENU <b> / FIELD NOTES · ESC TO CLOSE</b></span><button id="close-info" class="icon-button" aria-label="Close menu and field notes">×</button></div>
+        <div class="intro-top"><span>MENU <b> / FIELD NOTES · <span class="inline-keys" data-control-prompt="menu"><kbd>ESC</kbd></span> TO CLOSE</b></span><button id="close-info" class="icon-button" aria-label="Close menu and field notes">×</button></div>
+        <div class="gamepad-menu-help" data-gamepad-help hidden>LEFT STICK / D-PAD: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK: SCROLL</div>
         <h2 id="info-title">A farm is a system.</h2>
         <details id="audio-mixer" class="audio-mixer">
           <summary>TEMPORARY SOUND MIXER</summary>
@@ -201,13 +204,14 @@
         <button type="button" class="reset-progress">RESET PROGRESS</button>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The rover, soil and crops are likewise simplified.</p>
-        <p>Hold Work to approach and service eligible plots in sequence; release and press again after an objective completes. Use F, the Park Tool button, or gamepad B to leave the machine; return to its handle to pick it up. At the white cabinet switch, press Space, Work, or gamepad A to start a timed irrigation cycle. At night, approach the glowing habitat door and press Space, Work, or gamepad A to rest. On touch devices, drag the joystick to move, swipe the view to orbit, pinch the view to zoom, tap a plot to target it and hold Work. Tap Tools to open the attachment menu. Open Controls for alternative movement, work, and camera buttons. With a keyboard, use WASD to move, arrows to pan the camera, C to recenter, 1–4 to change attachments, Q to orbit clockwise, E to orbit counterclockwise, I to look up, K to look down, and +/− to zoom. Pinch or scroll on a trackpad, or use the mouse wheel to zoom. A standard gamepad uses the left stick or D-pad to move, right stick to orbit, triggers to zoom, bumpers to change tools and Start for these notes. Hover, focus or tap an attachment for its purpose.</p>
+        <p>Hold <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> or Work to approach and service eligible plots; release and press again after an objective completes. Use <span class="inline-keys" data-control-prompt="park"><kbd>F</kbd></span> or Park Tool to leave the machine; return to its handle to pick it up. At the white cabinet switch, press <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> or Work to start irrigation. At night, use the same control at the habitat door to rest. Change attachments with <span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span>, orbit with <span class="inline-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span>, and zoom with <span class="inline-keys" data-control-prompt="zoom"><kbd>+</kbd><kbd>−</kbd></span>. On touch devices, drag the joystick to move, swipe the view to orbit, pinch to zoom, tap a plot to target it and hold Work. Open Controls for alternative on-screen buttons. Keyboard users can also use arrows to pan, C to recenter, I and K to tilt, and the mouse wheel or trackpad to zoom. A gamepad D-pad also moves. Hover, focus or tap an attachment for its purpose.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>
     </div>
     <dialog id="reset-dialog" class="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
       <h2 id="reset-title">Reset progress?</h2>
       <p id="reset-description">This permanently deletes this browser's saved mission, including your plots, time and total potatoes harvested. The experience will restart from the beginning.</p>
+      <div class="gamepad-menu-help" data-gamepad-help hidden>LEFT STICK / D-PAD: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · <span class="inline-keys" data-control-prompt="park"><kbd>F</kbd></span> BACK</div>
       <label class="reset-confirmation"><input id="reset-confirmation" type="checkbox"> <span>I understand that my saved progress will be deleted.</span></label>
       <p id="reset-error" class="reset-error" role="alert" hidden></p>
       <div class="reset-actions">

@@ -12,12 +12,14 @@ export function pressKeyboardKey(keys, event) {
 
 export function readGamepad(gamepad) {
   const pressed = index => Boolean(gamepad?.buttons[index]?.pressed);
+  const x = gamepad?.axes[0] || 0, y = gamepad?.axes[1] || 0;
+  const moving = Math.hypot(x, y) > 0.2;
   return {
-    right: deadzone(gamepad?.axes[0]) + Number(pressed(15)) - Number(pressed(14)),
-    forward: -deadzone(gamepad?.axes[1]) + Number(pressed(12)) - Number(pressed(13)),
+    right: (moving ? x : 0) + Number(pressed(15)) - Number(pressed(14)),
+    forward: (moving ? -y : 0) + Number(pressed(12)) - Number(pressed(13)),
     orbit: deadzone(gamepad?.axes[2]),
     tilt: deadzone(gamepad?.axes[3]),
-    buttons: Array.from({ length: 10 }, (_, index) => pressed(index))
+    buttons: Array.from({ length: 16 }, (_, index) => pressed(index))
   };
 }
 

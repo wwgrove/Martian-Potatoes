@@ -2,6 +2,8 @@ import * as THREE from '../vendor/three.module.js';
 import { detachUpright, cameraTilt } from './scene-helpers.js';
 import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
 import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
+import { controllerType, promptButtons, promptText, isFaceButton, updateControllerPrompts } from './controller-prompts.js';
+import { createGamepadMenu } from './gamepad-menu.js';
 import { loadProgress, saveProgress, resetProgress } from './persistence.js';
 import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, validateSiloPreview, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
 import { setupMusic } from './music.js';
@@ -763,11 +765,11 @@ let previousWorking = false, previousNight = false;
 const treadDistance = [0, 0];
 const keys = new Set();
 let screenMove = null, screenWork = false, previousGamepadButtons = [], gamepadWorkReady = false, previousGamepadActive = false;
+let currentControllerType = 'keyboard', lastNonGamepadType = 'keyboard', currentGamepadIdentity = null;
 let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null;
 const touchCamera = createTouchCamera();
+const gamepadMenu = createGamepadMenu();
 const haptics = createHaptics(navigator);
-window.addEventListener('pointerdown', event => haptics.setSource(event.pointerType === 'touch' ? 'touch' : null), true);
-window.addEventListener('keydown', () => haptics.setSource(null), true);
 const CAMERA_MIN_PITCH = -1.1, CAMERA_MAX_PITCH = 1.25;
 let cameraAngle = 0.38, cameraPitch = 0.45, cameraDistance = 11;
 let previousCameraAngle = cameraAngle;
@@ -777,6 +779,21 @@ const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
 const targetPoint = new THREE.Vector3(), cameraPoint = new THREE.Vector3(), viewDirection = new THREE.Vector3();
 const interactionPosition = new THREE.Vector3(), interactionProjection = new THREE.Vector3(), astronautWorld = new THREE.Vector3();
 const coarsePointer = window.matchMedia('(pointer: coarse)');
+const isGamepadMode = type => type !== 'keyboard' && type !== 'touch';
+function setPromptMode(type) {
+  if (!isGamepadMode(type)) lastNonGamepadType = type;
+  if (currentControllerType !== type || !document.body.dataset.inputMode) {
+    currentControllerType = type;
+    updateControllerPrompts(document, type);
+  }
+}
+setPromptMode(coarsePointer.matches ? 'touch' : 'keyboard');
+window.addEventListener('pointerdown', event => {
+  const touch = event.pointerType === 'touch';
+  haptics.setSource(touch ? 'touch' : null);
+  setPromptMode(touch ? 'touch' : 'keyboard');
+}, true);
+window.addEventListener('keydown', () => { haptics.setSource(null); setPromptMode('keyboard'); }, true);
 const desktopLayout = window.matchMedia('(min-width: 601px) and (pointer: fine), (min-width: 601px) and (pointer: none)');
 function positionFieldGuide() {
   const container = desktopLayout.matches ? $('toolbox') : $('mission-hud');
@@ -1073,16 +1090,16 @@ function updateUI() {
     if (switching) instruction = 'The astronaut is exchanging attachments.';
     else if (phase.action === 'water') {
       if (irrigationRemaining > 0) instruction = `Sprinklers running · ${Math.ceil(irrigationRemaining)} seconds remaining.`;
-      else if (!parked) instruction = 'Park the machine (F), then walk to the blue marker at the white cabinet.';
+      else if (!parked) instruction = `Park the machine (${promptText(currentControllerType, 'park')}), then walk to the blue marker at the white cabinet.`;
       else if (!nearWaterSwitch(astronaut.position)) instruction = 'Walk to the blue marker at the white irrigation cabinet.';
       else if (!canStartIrrigation(state)) instruction = 'Wait for every plot to reach the irrigation checkpoint.';
-      else instruction = 'Press Space or Work at the cabinet switch to start the sprinklers.';
+      else instruction = `Press ${promptText(currentControllerType, 'work')} or Work at the cabinet switch to start the sprinklers.`;
     }
-    else if (parked) instruction = 'Return to the machine handle and press F or Pick up tool.';
+    else if (parked) instruction = `Return to the machine handle and press ${promptText(currentControllerType, 'park')} or Pick up tool.`;
     else if (phase.tool && phase.tool !== activeTool) instruction = state.phase === 5
       ? 'Select tool 02 · Hilling plow again to mound soil over the shoots.'
       : `Select tool ${toolLabels[phase.tool]} for this objective.`;
-    else if (state.phase === 5) instruction = 'Use the plow again: hold Space or Work on blue-marked growing plots.';
+    else if (state.phase === 5) instruction = `Use the plow again: hold ${promptText(currentControllerType, 'work')} or Work on blue-marked growing plots.`;
     else if (state.phase === 7) instruction = 'Harvest blue-marked mature crops. Rest at night to accelerate growth.';
     else instruction = `Move to a marked plot and work to ${phase.action}.`;
   }
@@ -1127,18 +1144,18 @@ function updateInteractionPrompt() {
   if (nearWaterSwitch(astronautWorld) && (phase?.action === 'water' || irrigationRemaining > 0)) {
     interactionPosition.set(WATER_SWITCH.x, 1.8, WATER_SWITCH.z);
     if (irrigationRemaining > 0) { action = `SPRINKLERS RUNNING · ${Math.ceil(irrigationRemaining)}S`; }
-    else if (!parked) { key = 'F'; action = 'PARK MACHINE'; alternative = 'B / PARK TOOL'; }
+    else if (!parked) { key = 'F'; action = 'PARK MACHINE'; alternative = 'PARK TOOL'; }
     else if (!canStartIrrigation(state)) { action = 'WAIT FOR CROPS TO GROW'; }
-    else { key = 'SPACE'; action = 'START SPRINKLERS'; alternative = 'A / WORK'; }
+    else { key = 'SPACE'; action = 'START SPRINKLERS'; alternative = 'WORK'; }
   } else if (nearRestDoor(parked ? astronaut.position : rig.position)) {
     interactionPosition.set(REST_DOOR.x, 2.8, REST_DOOR.z);
-    if (isNight(state.minutes) && irrigationRemaining === 0) { key = 'SPACE'; action = 'REST'; alternative = 'A / WORK'; }
+    if (isNight(state.minutes) && irrigationRemaining === 0) { key = 'SPACE'; action = 'REST'; alternative = 'WORK'; }
     else { action = irrigationRemaining > 0 ? 'WAIT FOR SPRINKLERS' : 'REST AVAILABLE AT 19:00'; }
   } else if (parked) {
     rig.localToWorld(interactionPosition.set(0, 0, 1.05));
     if (Math.hypot(astronaut.position.x - interactionPosition.x, astronaut.position.z - interactionPosition.z) <= 1.4) {
       interactionPosition.y += 1.7;
-      key = 'F'; action = 'PICK UP MACHINE'; alternative = 'B / PICK UP TOOL';
+      key = 'F'; action = 'PICK UP MACHINE'; alternative = 'PICK UP TOOL';
     }
   } else if (phase && currentTarget !== null && !snap && canWork(state, state.plots[currentTarget], activeTool)) {
     const target = plots[currentTarget];
@@ -1146,11 +1163,17 @@ function updateInteractionPrompt() {
     rig.localToWorld(front);
     if (Math.hypot(front.x - target.x, front.z - target.z) <= 2.1) {
       interactionPosition.set(target.x, 1.9, target.z);
-      key = 'SPACE'; action = `HOLD TO ${phase.action.toUpperCase()}`; alternative = 'A / WORK';
+      key = 'SPACE'; action = `HOLD TO ${phase.action.toUpperCase()}`; alternative = 'WORK';
     }
   }
   if (!action) { prompt.hidden = true; return; }
-  if (coarsePointer.matches) {
+  let keyLabel = '', faceButton = false;
+  if (isGamepadMode(currentControllerType) && key) {
+    const control = key === 'SPACE' ? 'work' : 'park';
+    const [text, label] = promptButtons(currentControllerType, control)[0];
+    faceButton = isFaceButton(currentControllerType, control);
+    key = text; keyLabel = label || text;
+  } else if (currentControllerType === 'touch') {
     if (key === 'SPACE') { key = 'WORK'; alternative = ''; }
     else if (key === 'F') { key = 'TAP'; alternative = parked ? 'PICK UP TOOL' : 'PARK TOOL'; }
   }
@@ -1159,6 +1182,8 @@ function updateInteractionPrompt() {
   prompt.hidden = false;
   const keyElement = $('interaction-key'), actionElement = $('interaction-action'), alternativeElement = $('interaction-alternative');
   if (keyElement.textContent !== key) keyElement.textContent = key;
+  if (keyLabel) keyElement.setAttribute('aria-label', keyLabel); else keyElement.removeAttribute('aria-label');
+  keyElement.classList.toggle('gamepad-face', faceButton);
   keyElement.hidden = !key;
   if (actionElement.textContent !== action) actionElement.textContent = action;
   if (alternativeElement.textContent !== alternative) alternativeElement.textContent = alternative;
@@ -1265,7 +1290,7 @@ function toggleMachine() {
     attachmentPivot.rotation.x = 0;
     detachUpright(scene, astronaut);
     parked = true;
-    message('Machine parked. Press F or the machine button near its handle to pick it up.');
+    message(`Machine parked. Press ${promptText(currentControllerType, 'park')} or the machine button near its handle to pick it up.`);
   }
   updateToolUI();
   haptics.trigger('attach', performance.now());
@@ -1528,19 +1553,40 @@ function frame(now) {
   const dt = Math.min((now - previous) / 1000, 1); previous = now;
   if (document.hidden) return;
   const connectedGamepad = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null;
+  const gamepadIdentity = connectedGamepad ? `${connectedGamepad.index}:${connectedGamepad.id}` : null;
+  if (gamepadIdentity !== currentGamepadIdentity) {
+    currentGamepadIdentity = gamepadIdentity;
+    previousGamepadButtons = []; previousGamepadActive = false; gamepadWorkReady = false;
+    setPromptMode(connectedGamepad ? controllerType(connectedGamepad) : lastNonGamepadType);
+  }
   const gamepad = readGamepad(connectedGamepad);
   haptics.setGamepad(connectedGamepad);
   const gamepadActive = Boolean(gamepad.right || gamepad.forward || gamepad.orbit || gamepad.tilt || gamepad.buttons.some(Boolean));
   if (gamepadActive) {
     haptics.setSource('gamepad');
-    if (!previousGamepadActive) sounds.unlock();
+    if (!previousGamepadActive || gamepad.buttons.some((pressed, index) => pressed && !previousGamepadButtons[index])) {
+      setPromptMode(controllerType(connectedGamepad));
+      sounds.unlock();
+    }
   }
   previousGamepadActive = gamepadActive;
-  if ($('reset-dialog').open) { gamepadWorkReady = false; previousGamepadButtons = gamepad.buttons; return; }
   const wasStarted = started;
-  if (!gamepad.buttons[0]) gamepadWorkReady = true;
-  if (newlyPressed(gamepad.buttons, previousGamepadButtons, 0) && !started) $('start-button').click();
-  if (started && !restCutscene && wasStarted) {
+  const menuRoot = $('reset-dialog').open ? $('reset-dialog') : !started ? $('intro') : !$('info').hidden ? $('info') : null;
+  if (menuRoot) {
+    const reset = menuRoot === $('reset-dialog'), intro = menuRoot === $('intro');
+    if (!reset && !intro && newlyPressed(gamepad.buttons, previousGamepadButtons, 9)) $('close-info').click();
+    else gamepadMenu.update(menuRoot, reset ? $('reset-cancel') : intro ? $('start-button') : $('close-info'),
+        reset ? null : intro ? document.querySelector('.intro-plan') : document.querySelector('.info-card'),
+        gamepad, previousGamepadButtons, now, dt, () => {
+          if (reset) $('reset-dialog').close();
+          else if (!intro) $('close-info').click();
+        });
+    gamepadWorkReady = false;
+  } else {
+    gamepadMenu.reset();
+    if (!gamepad.buttons[0]) gamepadWorkReady = true;
+  }
+  if (!menuRoot && started && !restCutscene && wasStarted) {
     if (newlyPressed(gamepad.buttons, previousGamepadButtons, 9)) {
       if ($('info').hidden) $('info-button').click(); else $('close-info').click();
     }
@@ -1706,7 +1752,7 @@ function frame(now) {
       carriedSeed.position.copy(seedHandPosition).lerp(seedGroundPosition, plantPose.drop);
     }
     const night = isNight(state.minutes);
-    if (night && !previousNight) message('Nightfall: approach the habitat door and press Space or Work to rest.');
+    if (night && !previousNight) message(`Nightfall: approach the habitat door and press ${promptText(currentControllerType, 'work')} or Work to rest.`);
     previousNight = night;
     doorBeacon.visible = night;
     doorBeacon.scale.setScalar(1 + Math.sin(elapsed * 3) * 0.1);
