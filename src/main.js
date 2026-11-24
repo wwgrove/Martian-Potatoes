@@ -135,8 +135,7 @@ const mat = {
   rubber: material(0x343b37), tread: material(0x515951), steel: material(0xb9c4b8),
   darkSteel: material(0x6a7770), white: material(0xe5e2ce), suit: material(0xcdd4c7),
   suitDark: material(0x8d9f95), visor: material(0x304f50, { metalness: 0.35, roughness: 0.3 }),
-  red: material(0xc76c49), dirt: material(0x76513b), soil: material(0x503d30),
-  worked: material(0x211710), floor: material(0xa58e74),
+  red: material(0xc76c49), dirt: material(0x76513b), floor: material(0xa58e74),
   green: material(0x719765), leaf: material(0x67965e), leafLight: material(0x9abb7d),
   cream: material(0xe7dcbf), potato: material(0xc69b65), light: new THREE.MeshBasicMaterial({ color: 0xffe5a7 }),
   blue: material(0x799f9e), glass: new THREE.MeshBasicMaterial({ color: 0xb9d6c6, transparent: true, opacity: 0.095, side: THREE.DoubleSide, depthWrite: false })
@@ -295,8 +294,34 @@ function animateSilo(now, dt) {
   siloPotatoes.instanceMatrix.needsUpdate = true;
 }
 
-const platform = cylinder(scene, mat.floor, 0, -0.03, 0, 10.1, 0.22);
-platform.scale.z = 1;
+const dirtCanvas = document.createElement('canvas');
+dirtCanvas.width = dirtCanvas.height = 256;
+const dirtContext = dirtCanvas.getContext('2d');
+if (!dirtContext) {
+  $('error').hidden = false;
+  $('error').textContent = 'The greenhouse dirt texture could not be created. Please try a current browser.';
+  throw new Error('Canvas 2D is not supported.');
+}
+dirtContext.fillStyle = '#e2ded7';
+dirtContext.fillRect(0, 0, 256, 256);
+let dirtSeed = 1437;
+function dirtRandom() {
+  dirtSeed = (dirtSeed * 1664525 + 1013904223) >>> 0;
+  return dirtSeed / 4294967296;
+}
+for (let i = 0; i < 6000; i++) {
+  const x = dirtRandom() * 256, y = dirtRandom() * 256, size = 0.5 + dirtRandom() * 2;
+  dirtContext.fillStyle = i % 3 ? 'rgba(70, 56, 44, 0.13)' : 'rgba(255, 249, 235, 0.23)';
+  dirtContext.fillRect(x, y, size, size * (0.5 + dirtRandom()));
+}
+const dirtTexture = new THREE.CanvasTexture(dirtCanvas);
+dirtTexture.colorSpace = THREE.SRGBColorSpace;
+dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
+dirtTexture.repeat.set(6, 6);
+const domeGround = new THREE.Mesh(new THREE.CircleGeometry(10, 64), material(0x937158, { map: dirtTexture }));
+domeGround.rotation.x = -Math.PI / 2;
+domeGround.position.y = 0.08;
+scene.add(domeGround);
 const dome = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat.glass);
 dome.position.y = 0.06; scene.add(dome);
 const ribMat = material(0x899f90);
@@ -363,7 +388,8 @@ const guideDestination = new THREE.Vector3();
 
 const plots = [];
 const soilDetails = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x715741), PLOT_COUNT * 24);
-const plotMaterial = [mat.soil, mat.worked, material(0x291b14), material(0x2d1f17), material(0x614831), material(0x4c3b2b), material(0x493a2a), material(0x4c3b2b), material(0x66503a)];
+const plotMaterial = [0x6f513e, 0x39271d, 0x3e291e, 0x443026, 0x70503a, 0x5c4232, 0x543b2d, 0x5c4232, 0x795b43]
+  .map(color => material(color, { transparent: true, opacity: 0.55, depthWrite: false }));
 const furrows = new THREE.InstancedMesh(sphereGeo, material(0x79543b), PLOT_COUNT * 5);
 const plantingHoles = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 20), material(0x211711), PLOT_COUNT);
 const plantedMounds = new THREE.InstancedMesh(sphereGeo, material(0x926b4b), PLOT_COUNT);
@@ -390,14 +416,18 @@ function updatePlotDetails(visual, index, stage) {
   }
   for (const mesh of [furrows, plantingHoles, plantedMounds, dampSoil, waterGlints]) mesh.instanceMatrix.needsUpdate = true;
 }
+const plotEdges = [], plotGeometry = new THREE.PlaneGeometry(1.9, 2);
 for (let row = 0; row < PLOT_ROWS; row++) {
   for (let col = 0; col < PLOT_COLUMNS; col++) {
     const index = row * PLOT_COLUMNS + col;
     const x = (col - (PLOT_COLUMNS - 1) / 2) * 2, z = (row - (PLOT_ROWS - 1) / 2) * 2.1 - 0.3;
     const group = new THREE.Group(); group.position.set(x, -0.2, z); scene.add(group);
-    box(group, mat.suitDark, 0, 0.12, 0, 1.95, 0.24, 2.05);
-    const soil = box(group, mat.soil, 0, 0.255, 0, 1.78, 0.09, 1.88);
+    const soil = new THREE.Mesh(plotGeometry, plotMaterial[0]);
+    soil.rotation.x = -Math.PI / 2; soil.position.y = 0.3; group.add(soil);
     soil.userData.plot = index;
+    for (const [ax, az, bx, bz] of [[-0.95, -1, 0.95, -1], [0.95, -1, 0.95, 1], [0.95, 1, -0.95, 1], [-0.95, 1, -0.95, -1]]) {
+      plotEdges.push(x + ax, 0.105, z + az, x + bx, 0.105, z + bz);
+    }
     for (let n = 0; n < 24; n++) {
       const size = 0.025 + random() * 0.035;
       instanceTransform.position.set(x + (random() - 0.5) * 1.6, 0.11, z + (random() - 0.5) * 1.7);
@@ -427,6 +457,11 @@ for (let row = 0; row < PLOT_ROWS; row++) {
     plots.push({ group, soil, marker, selected, plant, seed, ready, x, z, lastStage: -1, lastGrowth: -1 });
   }
 }
+const plotGrid = new THREE.LineSegments(
+  new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(plotEdges, 3)),
+  new THREE.LineBasicMaterial({ color: 0xb9a080, transparent: true, opacity: 0.55 })
+);
+scene.add(plotGrid);
 
 const dropletsPerRow = 36;
 const sprayGeometry = new THREE.BufferGeometry();
