@@ -1,0 +1,13 @@
+{
+  "name": "Martian Potatoes",
+  "short_name": "Martian Potatoes",
+  "description": "An interactive Martian agriculture concept.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#111b1b",
+  "theme_color": "#111b1b",
+  "icons": [
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

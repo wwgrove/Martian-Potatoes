@@ -6,6 +6,8 @@ A static 3D concept demo for a tracked Martian agriculture multi-tool. No accoun
 
 Serve this folder with any static web server (ES modules need HTTP, not `file://`). For local development, run `npm install` and `npm run serve`, then open `http://localhost:8080`. Publish the folder to a GitHub repository and enable GitHub Pages from the repository's root branch. All game assets, including Three.js, are local and paths are relative, so it also works under a GitHub Pages project subpath.
 
+Browser and home-screen icons use the supplied emblem. Social previews use the PNG card in `assets/social-preview.png`; the absolute Open Graph and Twitter URLs in `index.html` target the domain in `CNAME` and should be updated if the site moves. Sharing services may cache previews.
+
 To preview on a phone on the same Wi-Fi, start the server on all network interfaces (for example `npx http-server . -a 0.0.0.0 -p 8081 -c-1`) and open `http://<computer-local-ip>:8081` on the phone. The computer's firewall and Wi-Fi network must allow the connection. This exposes the project folder to devices on that network; stop the server when finished.
 
 ## Controls
