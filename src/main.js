@@ -318,6 +318,22 @@ const dirtTexture = new THREE.CanvasTexture(dirtCanvas);
 dirtTexture.colorSpace = THREE.SRGBColorSpace;
 dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
 dirtTexture.repeat.set(6, 6);
+const tilledCanvas = document.createElement('canvas');
+tilledCanvas.width = tilledCanvas.height = 256;
+const tilledContext = tilledCanvas.getContext('2d');
+if (!tilledContext) {
+  $('error').hidden = false;
+  $('error').textContent = 'The tilled soil texture could not be created. Please try a current browser.';
+  throw new Error('Canvas 2D is not supported.');
+}
+tilledContext.drawImage(dirtCanvas, 0, 0);
+tilledContext.fillStyle = 'rgba(57, 39, 27, 0.3)';
+for (let i = 0; i < 1800; i++) {
+  const x = dirtRandom() * 256, y = dirtRandom() * 256;
+  tilledContext.fillRect(x, y, 2 + dirtRandom() * 6, 0.5 + dirtRandom() * 2);
+}
+const tilledTexture = new THREE.CanvasTexture(tilledCanvas);
+tilledTexture.colorSpace = THREE.SRGBColorSpace;
 const domeGround = new THREE.Mesh(new THREE.CircleGeometry(10, 64), material(0x937158, { map: dirtTexture }));
 domeGround.rotation.x = -Math.PI / 2;
 domeGround.position.y = 0.08;
@@ -390,6 +406,8 @@ const plots = [];
 const soilDetails = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), material(0x715741), PLOT_COUNT * 24);
 const plotMaterial = [0x6f513e, 0x39271d, 0x3e291e, 0x443026, 0x70503a, 0x5c4232, 0x543b2d, 0x5c4232, 0x795b43]
   .map(color => material(color, { transparent: true, opacity: 0.55, depthWrite: false }));
+plotMaterial[1].map = tilledTexture;
+plotMaterial[1].opacity = 0.95;
 const furrows = new THREE.InstancedMesh(sphereGeo, material(0x79543b), PLOT_COUNT * 5);
 const plantingHoles = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 20), material(0x211711), PLOT_COUNT);
 const plantedMounds = new THREE.InstancedMesh(sphereGeo, material(0x926b4b), PLOT_COUNT);

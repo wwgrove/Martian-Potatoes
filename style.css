@@ -380,11 +380,26 @@ body[data-input-mode=playstation] :focus,body[data-input-mode=xbox] :focus,body[
   .tool-menu{bottom:calc(100% + 16px);max-height:calc(100dvh - 90px);overflow-y:auto}
   .screen-controls{bottom:calc(130px + env(safe-area-inset-bottom))}
 }
-@media(max-height:500px) and (pointer:coarse){
-  .mission-hud{top:54px;flex-direction:row}
-  .mission-hud .mission,.mission-hud .work-wrap{width:min(260px,calc((100vw - 100px)/2))}
+@media(orientation:landscape) and (max-height:500px) and (pointer:coarse){
+  .mission-hud{top:54px;left:max(12px,env(safe-area-inset-left));flex-direction:column;gap:4px}
+  .mission-hud .mission,.mission-hud .work-wrap{width:min(195px,calc(100vw - 24px));padding:6px 8px}
+  .mission-hud .mission{position:relative;top:auto;left:auto;grid-template-columns:minmax(0,1fr) auto;gap:2px 3px}
+  .mission .objective-label{font-size:9px}
+  .mobile-clock{position:absolute;grid-column:1 / -1;top:0;right:0;margin:0;font-size:8px;letter-spacing:0;white-space:nowrap}
+  .mission h2{margin:2px 0 0;font-size:12px;line-height:1.15}
+  .mission #instruction{margin:0 0 2px;font-size:10px;line-height:1.15}
+  .mission .mission-footer{grid-column:1;grid-row:5;font-size:8px}
+  .mission .harvest-total{grid-column:2;grid-row:5;margin:0;padding:0;border:0}
+  .mission .harvest-total span{font-size:8px;white-space:nowrap}
+  .mission .harvest-total strong{font-size:12px}
+  .work-insight{gap:6px;margin-bottom:4px}
+  .work-diagram{flex-basis:32px;width:32px;height:30px}
+  .work-insight-copy span{font-size:8px}
+  .work-insight-copy strong{font-size:10px}
+  .work-insight-copy p{font-size:9px;line-height:1.15}
+  .work-top{margin-bottom:3px}
+  .progress-track,.work-track{height:5px}
 }
-
 .tool{gap:4px}
 .tool-symbol{flex:0 0 30px}
 .tool>span:nth-child(3){min-width:0}
@@ -404,4 +419,17 @@ body[data-input-mode=playstation] :focus,body[data-input-mode=xbox] :focus,body[
 @media(max-width:300px){
   .tools-toggle{padding:5px 3px}
   .tools-toggle span:last-child{display:none}
+}
+@media(orientation:landscape) and (max-height:370px) and (pointer:coarse){
+  .mission-hud{top:48px}
+  .mission h2{font-size:11px}
+  .mission #instruction{font-size:9px;line-height:1.1}
+  .work-diagram{display:none}
+  .work-insight-copy strong{margin-top:1px}
+  .work-insight-copy p{margin-top:2px}
+  .joystick{width:72px;height:72px}
+  .joystick-knob{width:32px;height:32px}
+  .bottom{width:96px}
+  .tools-toggle{min-height:48px}
+  .action-dock .work-action{width:64px;height:64px;min-width:64px;min-height:64px}
 }
