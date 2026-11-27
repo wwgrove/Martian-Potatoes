@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES } from '../src/simulation.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, gridAlignedMovement, constrainGridMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, growthStage, GROW_SECONDS, WATER_SWITCH, REST_DOOR, REST_GROWTH_SECONDS, PLOT_COLUMNS, PLOT_ROWS, PLOT_COUNT, PHASES, requiredToolForPhase } from '../src/simulation.js';
 import { loadProgress, saveProgress, resetProgress, SAVE_KEY } from '../src/persistence.js';
 import { detachUpright, cameraTilt, createDottedGuide } from '../src/scene-helpers.js';
 import { Group, Matrix4, Scene, Vector3 } from '../vendor/three.module.js';
+
+test('required attachment follows the objective and allows restarting after harvest', () => {
+  assert.deepEqual(PHASES.map((_, phase) => requiredToolForPhase(phase)),
+    ['tiller', 'plow', 'auger', null, null, 'plow', null, 'sifter']);
+  assert.equal(requiredToolForPhase(PHASES.length), 'tiller');
+});
 
 test('movement follows the camera after orbiting, including diagonals', () => {
   for (const angle of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.73]) {
@@ -20,6 +26,26 @@ test('movement follows the camera after orbiting, including diagonals', () => {
     assert.ok(Math.abs(Math.hypot(diagonal.x, diagonal.z) - 1) < 1e-10);
   }
   assert.deepEqual(cameraRelativeMovement(0, 0, 1), { x: 0, z: 0 });
+});
+
+test('Wii movement stays square to the field while following the nearest camera direction', () => {
+  for (const angle of [-Math.PI, -2.4, -1.2, -0.3, 0.38, 1, 2.5, Math.PI]) {
+    for (const [right, forward] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const direction = gridAlignedMovement(right, forward, angle);
+      assert.ok(direction.x === 0 || direction.z === 0);
+      assert.ok(Math.abs(Math.hypot(direction.x, direction.z) - 1) < 1e-10);
+      const cameraDirection = cameraRelativeMovement(right, forward, angle);
+      assert.ok(direction.x * cameraDirection.x + direction.z * cameraDirection.z >= Math.SQRT1_2 - 1e-10);
+    }
+  }
+  assert.deepEqual(gridAlignedMovement(-1, 0, 0.38), { x: -1, z: 0 });
+  assert.deepEqual(gridAlignedMovement(-1, 0, Math.PI / 2), { x: 0, z: 1 });
+});
+
+test('Wii movement stops at the field boundary without sliding off its grid line', () => {
+  assert.deepEqual(constrainGridMovement(5, 4, { x: 1, z: 0 }, 5), { x: 3, z: 4 });
+  assert.deepEqual(constrainGridMovement(4, -5, { x: 0, z: -1 }, 5), { x: 4, z: -3 });
+  assert.deepEqual(constrainGridMovement(2, 4, { x: 1, z: 0 }, 5), { x: 2, z: 4 });
 });
 
 test('a parked astronaut keeps the same camera-relative facing as the camera orbits', () => {

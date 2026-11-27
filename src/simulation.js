@@ -21,6 +21,10 @@ export const PHASES = [
   { title: 'Lift the potato harvest', name: 'HARVEST', action: 'harvest', tool: 'sifter', duration: 1 }
 ];
 
+export function requiredToolForPhase(phase) {
+  return phase === PHASES.length ? 'tiller' : PHASES[phase]?.tool || null;
+}
+
 export function cameraRelativeMovement(right, forward, cameraAngle) {
   const length = Math.hypot(right, forward);
   if (length === 0) return { x: 0, z: 0 };
@@ -29,6 +33,30 @@ export function cameraRelativeMovement(right, forward, cameraAngle) {
     x: (right * cos - forward * sin) / length,
     z: (-right * sin - forward * cos) / length
   };
+}
+
+export function gridAlignedMovement(right, forward, cameraAngle) {
+  const quarterTurn = Math.PI / 2;
+  const snapped = Math.round(cameraAngle / quarterTurn) * quarterTurn;
+  const direction = cameraRelativeMovement(right, forward, snapped);
+  return {
+    x: Math.abs(direction.x) < 1e-10 ? 0 : direction.x,
+    z: Math.abs(direction.z) < 1e-10 ? 0 : direction.z
+  };
+}
+
+export function constrainGridMovement(x, z, direction, limit) {
+  const radius = Math.hypot(x, z);
+  if (radius <= limit) return { x, z };
+  if (direction.z === 0) {
+    const bound = Math.sqrt(Math.max(0, limit * limit - z * z));
+    return { x: Math.max(-bound, Math.min(bound, x)), z };
+  }
+  if (direction.x === 0) {
+    const bound = Math.sqrt(Math.max(0, limit * limit - x * x));
+    return { x, z: Math.max(-bound, Math.min(bound, z)) };
+  }
+  return { x: x * limit / radius, z: z * limit / radius };
 }
 
 const shortestTurn = (from, to) => Math.atan2(Math.sin(to - from), Math.cos(to - from));

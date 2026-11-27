@@ -1,41 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { controllerType, promptButtons, promptText, isFaceButton, updateControllerPrompts } from '../src/controller-prompts.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { controllerChoices, defaultController, validController, gamepadPromptType, promptButtons, promptText, promptIcon, updateControllerPrompts } from '../src/controller-prompts.js';
 
-test('identifies controller families from names or browser vendor IDs without guessing unknown devices', () => {
-  assert.equal(controllerType(null), 'keyboard');
-  for (const id of ['Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 09cc)', 'Wireless Controller', 'DualSense Wireless Controller', '054c-0ce6']) {
-    assert.equal(controllerType({ id }), 'playstation');
-  }
-  for (const id of ['Xbox Wireless Controller', 'Xbox 360 Controller (XInput STANDARD GAMEPAD)', 'Vendor: 045e Product: 02ea']) {
-    assert.equal(controllerType({ id }), 'xbox');
-  }
-  assert.equal(controllerType({ id: 'Standard Gamepad' }), 'generic');
-  assert.equal(controllerType({ id: 'Wireless Controller (STANDARD GAMEPAD Vendor: 057e Product: 2009)' }), 'generic');
-  assert.equal(controllerType({ id: '' }), 'generic');
+test('controller choice defaults to PS4 and does not infer a standard gamepad brand', () => {
+  assert.equal(defaultController, 'playstation');
+  assert.equal(validController('ps5'), true);
+  assert.equal(validController('unknown'), false);
+  assert.equal(gamepadPromptType({ id: 'Xbox Wireless Controller' }, 'playstation'), 'playstation');
+  assert.equal(gamepadPromptType({ id: 'Wireless Controller' }, 'xbox'), 'xbox');
+  assert.equal(gamepadPromptType({ id: 'Wii Remote' }, 'xbox'), 'wii');
+  assert.equal(gamepadPromptType({ id: 'Standard Gamepad' }, 'wii'), 'generic');
 });
 
-test('controller prompts match the supported actions and distinguish brands', () => {
-  assert.deepEqual(promptButtons('playstation', 'work')[0], ['×', 'Cross button']);
-  assert.deepEqual(promptButtons('playstation', 'park')[0], ['○', 'Circle button']);
-  assert.equal(promptText('playstation', 'tools'), 'L1 / R1');
+test('prompts use the actual standard button positions and sideways Wii controls', () => {
+  assert.equal(promptText('playstation', 'work'), '×');
   assert.equal(promptText('xbox', 'work'), 'A');
-  assert.equal(promptText('xbox', 'park'), 'B');
-  assert.equal(promptText('xbox', 'tools'), 'LB / RB');
-  assert.equal(promptText('generic', 'work'), 'BOTTOM');
+  assert.equal(promptText('switch', 'work'), 'B');
+  assert.equal(promptText('switch', 'park'), 'A');
+  assert.equal(promptText('wii', 'work'), '2');
+  assert.equal(promptText('wii', 'park'), '1');
+  assert.equal(promptText('wii', 'tools'), 'A');
+  assert.equal(promptText('wii', 'orbit'), 'HOLD B');
   assert.equal(promptText('keyboard', 'tools'), '1 / 2 / 3 / 4');
   assert.deepEqual(promptButtons('touch', 'tools'), [['TAP TOOL', 'Tap an attachment']]);
-  assert.equal(isFaceButton('playstation', 'work'), true);
-  assert.equal(isFaceButton('xbox', 'park'), true);
-  assert.equal(isFaceButton('keyboard', 'work'), false);
-  assert.equal(isFaceButton('playstation', 'tools'), false);
 });
 
-test('switching prompts hides direct tool shortcuts and restores keyboard prompts on disconnect', () => {
+test('all selected controller artwork exists, with colored face buttons and white Wii icons', () => {
+  for (const type of controllerChoices) for (const action of ['move', 'work', 'park', 'menu', 'orbit', 'tools', 'zoom']) {
+    promptButtons(type, action).forEach((_, index) => {
+      const icon = promptIcon(type, action, index);
+      if (icon) assert.ok(existsSync(icon), `Missing ${icon}`);
+    });
+  }
+  assert.match(promptIcon('playstation', 'work'), /ps4_cross\.svg/);
+  assert.match(readFileSync(promptIcon('playstation', 'work'), 'utf8'), /#9CB5D6/);
+  assert.match(promptIcon('xbox', 'work'), /color_a/);
+  assert.match(promptIcon('wii', 'work'), /wii_button_2\.png$/);
+  assert.equal(promptIcon('touch', 'work'), '');
+});
+
+test('switching prompts renders accessible icons and restores keyboard and touch labels', () => {
   const prompt = { dataset: { controlPrompt: 'work' }, replaceChildren(...children) { this.children = children; } };
-  const toolKey = { hidden: false };
-  const gamepadHelp = {}, touchAlternative = {};
-  const info = {};
+  const toolKey = { hidden: false }, gamepadHelp = {}, touchAlternative = {}, info = {};
   const document = {
     body: { dataset: {} },
     querySelectorAll(selector) {
@@ -47,27 +54,20 @@ test('switching prompts hides direct tool shortcuts and restores keyboard prompt
     },
     getElementById() { return info; },
     createElement() {
-      return { attributes: {}, classList: { add() {} }, setAttribute(name, value) { this.attributes[name] = value; } };
+      return { attributes: {}, children: [], append(child) { this.children.push(child); }, classList: { add() {} }, setAttribute(name, value) { this.attributes[name] = value; } };
     }
   };
   updateControllerPrompts(document, 'playstation');
-  assert.equal(prompt.children[0].textContent, '×');
-  assert.equal(prompt.children[0].attributes['aria-label'], 'Cross button');
+  assert.equal(prompt.children[0].children[0].alt, 'Cross button');
+  assert.match(prompt.children[0].children[0].src, /ps4_cross\.svg/);
   assert.equal(toolKey.hidden, true);
-  assert.equal(info.title, 'Menu · OPTIONS');
   assert.equal(gamepadHelp.hidden, false);
-  updateControllerPrompts(document, 'xbox');
-  assert.equal(prompt.children[0].textContent, 'A');
-  assert.equal(info.title, 'Menu · MENU');
   updateControllerPrompts(document, 'touch');
   assert.equal(prompt.children[0].textContent, '● WORK');
-  assert.equal(document.body.dataset.inputMode, 'touch');
-  assert.equal(info.title, 'Menu');
   assert.equal(gamepadHelp.hidden, true);
   assert.equal(touchAlternative.hidden, true);
   updateControllerPrompts(document, 'keyboard');
   assert.equal(prompt.children[0].textContent, 'SPACE');
   assert.equal(toolKey.hidden, false);
   assert.equal(info.title, 'Menu · ESC');
-  assert.equal(touchAlternative.hidden, false);
 });

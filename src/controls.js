@@ -23,6 +23,26 @@ export function readGamepad(gamepad) {
   };
 }
 
+export function createGamepadSelector() {
+  let selected = null, previous = new Map();
+  return {
+    update(pads) {
+      const current = new Map();
+      for (const pad of pads) {
+        const id = `${pad.index}:${pad.id}`, input = readGamepad(pad), last = previous.get(id);
+        const active = Boolean(input.right || input.forward || input.orbit || input.tilt || input.buttons.some(Boolean));
+        const engaged = active && (!last?.active || input.buttons.some((pressed, index) => pressed && !last.buttons[index]));
+        current.set(id, { pad, input, active, engaged, previousButtons: last?.buttons || [] });
+      }
+      if (!current.has(selected)) selected = current.has('1000:Wii Remote') ? '1000:Wii Remote' : current.keys().next().value;
+      for (const [id, entry] of current) if (entry.engaged) selected = id;
+      const choice = current.get(selected);
+      previous = new Map([...current].map(([id, entry]) => [id, { active: entry.active, buttons: entry.input.buttons }]));
+      return choice || null;
+    }
+  };
+}
+
 export function newlyPressed(current, previous, index) {
   return current[index] && !previous[index];
 }

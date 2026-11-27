@@ -1,8 +1,8 @@
 import * as THREE from '../vendor/three.module.js';
 import { detachUpright, cameraTilt, createDottedGuide } from './scene-helpers.js';
-import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, MACHINE_PICKUP_REACH, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
-import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
-import { controllerType, promptButtons, promptText, isFaceButton, updateControllerPrompts } from './controller-prompts.js';
+import { createState, createGait, advanceGait, gaitBodyOffset, gaitArmSwing, gaitLegPose, plantingPose, cameraRelativeMovement, gridAlignedMovement, constrainGridMovement, followCameraTurn, digAlignment, nextSerpentinePlot, createApproach, advanceApproach, PHASES, requiredToolForPhase, PLOT_COUNT, PLOT_COLUMNS, PLOT_ROWS, MOVEMENT_RADIUS, WALK_RADIUS, MACHINE_PICKUP_REACH, TOOL_TYPES, REST_DOOR, REST_GROWTH_SECONDS, WATER_SWITCH, IRRIGATION_SECONDS, advance, rest, isNight, nearRestDoor, nearWaterSwitch, canStartIrrigation, completeIrrigation, growthStage, canWork, shouldGuideToMachine, isTillerRunning, completeWork, startNextCycle, phaseProgress } from './simulation.js';
+import { pressKeyboardKey, readGamepad, createGamepadSelector, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from './controls.js';
+import { controllerStorageKey, defaultController, validController, gamepadPromptType, promptButtons, promptText, promptIcon, isFaceButton, updateControllerPrompts } from './controller-prompts.js';
 import { createGamepadMenu } from './gamepad-menu.js';
 import { loadProgress, saveProgress, resetProgress } from './persistence.js';
 import { SILO_RADIUS, SILO_HEIGHT, SILO_FLOOR_HEIGHT, SILO_POTATO_SCALE, SILO_CAPACITY, validateSiloPreview, siloPotatoPose, siloFallOffset, siloRainStep } from './silo.js';
@@ -11,6 +11,7 @@ import { marsSky } from './sky.js';
 import { createHaptics } from './haptics.js';
 import { createSoundEffects, loadSoundVolumes, saveSoundVolumes } from './sound-effects.js';
 import { TERRAIN_WIDTH, TERRAIN_SEGMENTS, terrainHeight } from './terrain.js';
+import { createWiiRemote } from './wii-remote.js';
 
 const $ = id => document.getElementById(id);
 setupMusic($('background-music'), document.querySelectorAll('[data-music-toggle]'), window, $('music-status'));
@@ -860,9 +861,125 @@ let currentControllerType = 'keyboard', lastNonGamepadType = 'keyboard', current
 let joystickPointer = null, joystick = { right: 0, forward: 0 }, touchWorkPointer = null;
 const touchCamera = createTouchCamera();
 const gamepadMenu = createGamepadMenu();
+const gamepadSelector = createGamepadSelector();
 const haptics = createHaptics(navigator);
+let wiiCalibrating = false, previousWiiConnected = false, wiiSoundTestTimer = null;
+const wiiToneTest = {};
+function stopWiiSoundTest() {
+  if (wiiSoundTestTimer !== null) clearTimeout(wiiSoundTestTimer);
+  wiiSoundTestTimer = null;
+  sounds.setLoop('wii-test', null);
+  wii.sound.stopTrack(wiiToneTest);
+}
+const wii = createWiiRemote(navigator.hid, status => {
+  if (previousWiiConnected !== wii.connected && !wiiCalibrating) renderWiiCalibration('idle');
+  previousWiiConnected = wii.connected;
+  if (!wii.connected || !wii.hasSpeaker) stopWiiSoundTest();
+  sounds.setRemoteOutput(wii.connected && wii.hasSpeaker ? wii.sound : null);
+  document.body.dataset.wiiConnected = String(wii.connected);
+  document.querySelectorAll('.wii-status').forEach(element => { element.textContent = status; });
+  document.querySelectorAll('.wii-calibrate').forEach(button => { button.disabled = !wii.connected || !wii.hasMotion || wiiCalibrating; });
+  document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = !wii.connected || !wii.hasSpeaker || !soundEffectsEnabled; });
+  document.querySelectorAll('.wii-connect').forEach(button => {
+    button.textContent = wii.connected ? 'DISCONNECT WII REMOTE' : 'CONNECT WII REMOTE';
+  });
+}, error => {
+  console.error('Wii Remote:', error);
+  if (!wii.hasSpeaker) {
+    stopWiiSoundTest();
+    sounds.setRemoteOutput(null);
+    document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = true; });
+  }
+  document.querySelectorAll('.wii-status').forEach(element => { element.textContent = `Wii Remote: ${error.message}`; });
+});
+function renderWiiCalibration(state, detail = '') {
+  const labels = { checking: 'CHECKING MOTION', ready: 'MOTION READY', error: 'CHECK INTERRUPTED' };
+  document.querySelectorAll('.wii-calibration').forEach(section => {
+    section.dataset.state = state;
+    section.querySelector('.wii-calibration-status').hidden = state === 'idle';
+    section.querySelector('.wii-calibration-state').textContent = labels[state] || '';
+    section.querySelector('.wii-calibration-detail').textContent = detail;
+    const button = section.querySelector('.wii-calibrate');
+    button.hidden = state === 'checking';
+    button.textContent = state === 'ready' ? 'CALIBRATE AGAIN' : state === 'error' ? 'TRY AGAIN' : 'CALIBRATE WII MOTION';
+    section.querySelector('.wii-calibration-stop').hidden = state !== 'checking';
+  });
+}
+async function runWiiCalibration(button) {
+  wiiCalibrating = true;
+  document.querySelectorAll('.wii-calibrate, .wii-connect').forEach(item => { item.disabled = true; });
+  renderWiiCalibration('checking', 'Place the remote flat with the D-pad on the left and keep it still.');
+  const stop = button.closest('.wii-calibration').querySelector('.wii-calibration-stop');
+  stop.focus();
+  let restoreFocus = false;
+  try {
+    await wii.calibrate();
+    restoreFocus = document.activeElement === stop;
+    renderWiiCalibration('ready', 'Calibration complete. Hold B and rotate to move the camera.');
+  } catch (error) {
+    restoreFocus = document.activeElement === stop;
+    if (error.name === 'AbortError') renderWiiCalibration('idle');
+    else {
+      console.error('Wii Remote calibration failed:', error);
+      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = `Wii Remote: ${error.message}`; });
+      renderWiiCalibration('error', error.message);
+    }
+  } finally {
+    wiiCalibrating = false;
+    document.querySelectorAll('.wii-connect').forEach(item => { item.disabled = false; });
+    document.querySelectorAll('.wii-calibrate').forEach(item => { item.disabled = !wii.connected || !wii.hasMotion; });
+    if (restoreFocus) {
+      if (!button.disabled) button.focus();
+      else button.closest('.intro-card, .info-card').querySelector('.wii-connect').focus();
+    }
+  }
+}
+document.querySelectorAll('.wii-calibrate').forEach(button => {
+  button.addEventListener('click', () => runWiiCalibration(button));
+});
+document.querySelectorAll('.wii-calibration-stop').forEach(button => {
+  button.addEventListener('click', () => wii.stopCalibration());
+});
+document.querySelectorAll('.wii-sound-test').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
+    if (sounds.getVolumes().drill === 0) {
+      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'The auger volume is zero. Raise it in the sound mixer to test.'; });
+      return;
+    }
+    stopWiiSoundTest();
+    sounds.setLoop('wii-test', 'drill');
+    wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
+    document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending auger test sound to the Wii Remote for four seconds (experimental).'; });
+  });
+  document.querySelectorAll('.wii-tone-test').forEach(button => {
+    button.addEventListener('click', () => {
+      if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
+      stopWiiSoundTest();
+      wii.sound.testTone(wiiToneTest);
+      wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
+      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending an F-sharp major scale to the Wii Remote for four seconds (experimental).'; });
+    });
+  });
+});
+wii.setTool(activeTool);
+document.querySelectorAll('.wii-connect').forEach(button => {
+  button.addEventListener('click', async () => {
+    document.querySelectorAll('.wii-connect').forEach(item => { item.disabled = true; });
+    try {
+      if (wii.connected) await wii.disconnect();
+      else await wii.connect();
+    } catch (error) {
+      console.error('Wii Remote connection failed:', error);
+      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = `Wii Remote: ${error.message}`; });
+    } finally {
+      document.querySelectorAll('.wii-connect').forEach(item => { item.disabled = false; });
+    }
+  });
+});
 const CAMERA_MIN_PITCH = -1.1, CAMERA_MAX_PITCH = 1.25;
-let cameraAngle = 0.38, cameraPitch = 0.45, cameraDistance = 11;
+const DEFAULT_CAMERA_ANGLE = 0.38, DEFAULT_CAMERA_PITCH = 0.45;
+let cameraAngle = DEFAULT_CAMERA_ANGLE, cameraPitch = DEFAULT_CAMERA_PITCH, cameraDistance = 11;
 let previousCameraAngle = cameraAngle;
 const cameraPan = { x: 0, z: 0 };
 let dragging = false, lastX = 0, lastY = 0;
@@ -872,6 +989,15 @@ const interactionPosition = new THREE.Vector3(), interactionProjection = new THR
 const coarsePointer = window.matchMedia('(pointer: coarse)');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const isGamepadMode = type => type !== 'keyboard' && type !== 'touch';
+let selectedController = defaultController;
+try {
+  const savedController = window.localStorage.getItem(controllerStorageKey);
+  if (validController(savedController)) selectedController = savedController;
+} catch (error) {
+  console.error('Unable to load controller icon preference:', error);
+  $('controller-style-status').textContent = 'Controller icon preference could not be loaded or saved. Check browser site storage.';
+}
+$('controller-style').value = selectedController;
 function setPromptMode(type) {
   if (!isGamepadMode(type)) lastNonGamepadType = type;
   if (currentControllerType !== type || !document.body.dataset.inputMode) {
@@ -879,6 +1005,23 @@ function setPromptMode(type) {
     updateControllerPrompts(document, type);
   }
 }
+$('controller-style').addEventListener('change', event => {
+  selectedController = event.target.value;
+  if (!validController(selectedController)) return;
+  try {
+    window.localStorage.setItem(controllerStorageKey, selectedController);
+    $('controller-style-status').textContent = 'Icons only; controller support depends on your browser and adapter.';
+  } catch (error) {
+    console.error('Unable to save controller icon preference:', error);
+    $('controller-style-status').textContent = 'Controller icon preference could not be saved. Check browser site storage.';
+  }
+  const pads = [wii.gamepad(), ...(navigator.getGamepads ? Array.from(navigator.getGamepads()) : [])].filter(pad => pad && pad.mapping === 'standard');
+  const gamepad = pads.find(pad => `${pad.index}:${pad.id}` === currentGamepadIdentity) || pads[0];
+  if (gamepad && selectedController === 'wii' && gamepad.id !== 'Wii Remote') {
+    $('controller-style-status').textContent = 'Wii Remote icons require a connected Wii Remote; using generic prompts for this gamepad.';
+  }
+  setPromptMode(gamepad ? gamepadPromptType(gamepad, selectedController) : selectedController);
+});
 setPromptMode(coarsePointer.matches ? 'touch' : 'keyboard');
 window.addEventListener('pointerdown', event => {
   const touch = event.pointerType === 'touch';
@@ -1114,7 +1257,8 @@ function updateSwitch(dt) {
 const toolLabels = { tiller: '01 · Rotary tiller', plow: '02 · Hilling plow', auger: '03 · Mixing auger', sifter: '04 · Vibratory lifter' };
 let lastToolHintPhase = -1;
 function updateToolUI() {
-  const required = state.phase === PHASES.length ? 'tiller' : PHASES[state.phase]?.tool;
+  wii.setTool(activeTool);
+  const required = requiredToolForPhase(state.phase);
   const needsTool = required && required !== activeTool;
   document.querySelectorAll('.tool').forEach(button => {
     const selected = button.dataset.tool === activeTool;
@@ -1265,11 +1409,12 @@ function updateInteractionPrompt() {
     }
   }
   if (!action) { prompt.hidden = true; return; }
-  let keyLabel = '', faceButton = false;
+  let keyLabel = '', faceButton = false, icon = '';
   if (isGamepadMode(currentControllerType) && key) {
     const control = key === 'SPACE' ? 'work' : 'park';
     const [text, label] = promptButtons(currentControllerType, control)[0];
     faceButton = isFaceButton(currentControllerType, control);
+    icon = promptIcon(currentControllerType, control);
     key = text; keyLabel = label || text;
   } else if (currentControllerType === 'touch') {
     if (key === 'SPACE') { key = 'WORK'; alternative = ''; }
@@ -1279,7 +1424,16 @@ function updateInteractionPrompt() {
   if (interactionProjection.z < -1 || interactionProjection.z > 1 || Math.abs(interactionProjection.x) > 1 || Math.abs(interactionProjection.y) > 1) { prompt.hidden = true; return; }
   prompt.hidden = false;
   const keyElement = $('interaction-key'), actionElement = $('interaction-action'), alternativeElement = $('interaction-alternative');
-  if (keyElement.textContent !== key) keyElement.textContent = key;
+  if (keyElement.dataset.promptIcon !== icon || keyElement.dataset.promptText !== key) {
+    keyElement.replaceChildren();
+    if (icon) {
+      const image = document.createElement('img');
+      image.className = 'controller-icon'; image.src = icon; image.alt = '';
+      keyElement.append(image);
+    } else keyElement.textContent = key;
+    keyElement.dataset.promptIcon = icon; keyElement.dataset.promptText = key;
+  }
+  keyElement.classList.toggle('has-controller-icon', Boolean(icon));
   if (keyLabel) keyElement.setAttribute('aria-label', keyLabel); else keyElement.removeAttribute('aria-label');
   keyElement.classList.toggle('gamepad-face', faceButton);
   keyElement.hidden = !key;
@@ -1327,6 +1481,8 @@ function setScreenWork(enabled) {
 }
 function clearInputs() {
   haptics.stop();
+  wii.stopRumble();
+  if (wii.clearMotion()) { cameraAngle = DEFAULT_CAMERA_ANGLE; cameraPitch = DEFAULT_CAMERA_PITCH; }
   stopPreview();
   sounds.stopAll();
   keys.clear(); dragging = false; touchCamera.clear(); touchWorkPointer = null; resetJoystick();
@@ -1349,14 +1505,16 @@ window.setSiloPreview = value => {
 $('haptics-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
   haptics.setEnabled(enabled);
+  wii.setHapticsEnabled(enabled);
   event.currentTarget.setAttribute('aria-pressed', String(enabled));
   event.currentTarget.textContent = `HAPTICS: ${enabled ? 'ON' : 'OFF'}`;
 });
 $('sound-effects-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
-  if (!enabled) stopPreview();
+  if (!enabled) { stopPreview(); stopWiiSoundTest(); }
   soundEffectsEnabled = enabled;
   sounds.setEnabled(enabled);
+  document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = !enabled || !wii.connected || !wii.hasSpeaker; });
   $('audio-mixer-controls').querySelectorAll('button').forEach(button => { button.disabled = !enabled; });
   event.currentTarget.setAttribute('aria-pressed', String(enabled));
   event.currentTarget.textContent = `SOUND EFFECTS: ${enabled ? 'ON' : 'OFF'}`;
@@ -1574,6 +1732,7 @@ window.addEventListener('wheel', event => {
   cameraDistance = THREE.MathUtils.clamp(cameraDistance + wheelZoomDelta(event.deltaY, event.deltaMode, event.ctrlKey), 7, 20);
 }, { passive: false });
 window.addEventListener('keydown', event => {
+  if (event.target instanceof HTMLSelectElement) return;
   if (event.code === 'Escape') {
     if ($('reset-dialog').open) {
       if (!event.repeat) { event.preventDefault(); $('reset-dialog').close(); }
@@ -1659,20 +1818,25 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - previous) / 1000, 1); previous = now;
   if (document.hidden) return;
-  const connectedGamepad = navigator.getGamepads ? Array.from(navigator.getGamepads()).find(pad => pad && pad.mapping === 'standard') : null;
+  const pads = [...(navigator.getGamepads ? Array.from(navigator.getGamepads()) : []), wii.gamepad()].filter(pad => pad && pad.mapping === 'standard');
+  const selectedPad = gamepadSelector.update(pads);
+  const connectedGamepad = selectedPad?.pad || null;
   const gamepadIdentity = connectedGamepad ? `${connectedGamepad.index}:${connectedGamepad.id}` : null;
   if (gamepadIdentity !== currentGamepadIdentity) {
     currentGamepadIdentity = gamepadIdentity;
-    previousGamepadButtons = []; previousGamepadActive = false; gamepadWorkReady = false;
-    setPromptMode(connectedGamepad ? controllerType(connectedGamepad) : lastNonGamepadType);
+    previousGamepadButtons = selectedPad?.previousButtons || []; previousGamepadActive = false; gamepadWorkReady = false;
+    setPromptMode(connectedGamepad ? gamepadPromptType(connectedGamepad, selectedController) : lastNonGamepadType);
   }
   const gamepad = readGamepad(connectedGamepad);
+  const wiiMotion = wii.consumeMotion();
+  const usingWii = connectedGamepad?.id === 'Wii Remote';
+  if (usingWii && wiiMotion.released) { cameraAngle = DEFAULT_CAMERA_ANGLE; cameraPitch = DEFAULT_CAMERA_PITCH; }
   haptics.setGamepad(connectedGamepad);
   const gamepadActive = Boolean(gamepad.right || gamepad.forward || gamepad.orbit || gamepad.tilt || gamepad.buttons.some(Boolean));
   if (gamepadActive) {
     haptics.setSource('gamepad');
     if (!previousGamepadActive || gamepad.buttons.some((pressed, index) => pressed && !previousGamepadButtons[index])) {
-      setPromptMode(controllerType(connectedGamepad));
+      setPromptMode(gamepadPromptType(connectedGamepad, selectedController));
       unlockSoundEffects();
     }
   }
@@ -1680,6 +1844,7 @@ function frame(now) {
   const wasStarted = started;
   const menuRoot = $('reset-dialog').open ? $('reset-dialog') : !started ? $('intro') : !$('info').hidden ? $('info') : null;
   if (menuRoot) {
+    if (connectedGamepad?.id === 'Wii Remote') gamepad.tilt = Number(gamepad.buttons[6]) - Number(gamepad.buttons[7]);
     const reset = menuRoot === $('reset-dialog'), intro = menuRoot === $('intro');
     if (!reset && !intro && newlyPressed(gamepad.buttons, previousGamepadButtons, 9)) $('close-info').click();
     else gamepadMenu.update(menuRoot, reset ? $('reset-cancel') : intro ? $('start-button') : $('close-info'),
@@ -1699,7 +1864,14 @@ function frame(now) {
     }
     if ($('info').hidden) {
       if (newlyPressed(gamepad.buttons, previousGamepadButtons, 4)) selectTool(toolTypes[(toolTypes.indexOf(activeTool) + toolTypes.length - 1) % toolTypes.length]);
-      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 5)) selectTool(toolTypes[(toolTypes.indexOf(activeTool) + 1) % toolTypes.length]);
+      if (newlyPressed(gamepad.buttons, previousGamepadButtons, 5)) {
+        if (connectedGamepad?.id === 'Wii Remote') {
+          const required = requiredToolForPhase(state.phase);
+          if (!required) message('No attachment is needed for this objective.');
+          else if (required === activeTool && !switching && state.phase !== PHASES.length) message('The required attachment is already selected.');
+          else selectTool(required);
+        } else selectTool(toolTypes[(toolTypes.indexOf(activeTool) + 1) % toolTypes.length]);
+      }
       if (newlyPressed(gamepad.buttons, previousGamepadButtons, 1)) toggleMachine();
     }
   }
@@ -1753,21 +1925,31 @@ function frame(now) {
     const panDistance = Math.hypot(cameraPan.x, cameraPan.z);
     if (panDistance > 8) { cameraPan.x *= 8 / panDistance; cameraPan.z *= 8 / panDistance; }
     cameraAngle += (Number(keys.has('KeyE')) - Number(keys.has('KeyQ')) - gamepad.orbit) * dt * 1.5;
-    cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyK')) - Number(keys.has('KeyI')) + gamepad.tilt) * dt, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
+    if (usingWii) cameraAngle += wiiMotion.orbit;
+    cameraPitch = THREE.MathUtils.clamp(cameraPitch + (Number(keys.has('KeyK')) - Number(keys.has('KeyI')) + gamepad.tilt) * dt + (usingWii ? wiiMotion.tilt : 0), CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
     cameraDistance = THREE.MathUtils.clamp(cameraDistance + (Number(gamepad.buttons[6]) - Number(gamepad.buttons[7])) * dt * 5, 7, 20);
     const moving = (right !== 0 || forward !== 0) && !switching && !working && !plantingActive && !plantReturn;
     if (parked && !moving) astronaut.rotation.y = followCameraTurn(astronaut.rotation.y, previousCameraAngle, cameraAngle);
     previousCameraAngle = cameraAngle;
     if (moving) {
       camera.getWorldDirection(viewDirection);
-      const direction = cameraRelativeMovement(right, forward, Math.atan2(-viewDirection.x, -viewDirection.z));
+      const movementAngle = Math.atan2(-viewDirection.x, -viewDirection.z);
+      const wiiMovement = connectedGamepad?.id === 'Wii Remote' && (gamepad.right || gamepad.forward);
+      const direction = wiiMovement
+        ? gridAlignedMovement(right, forward, movementAngle)
+        : cameraRelativeMovement(right, forward, movementAngle);
       const dx = direction.x, dz = direction.z;
       const movingObject = parked ? astronaut : rig;
       const oldX = movingObject.position.x, oldZ = movingObject.position.z;
       const speed = Math.min(1, Math.hypot(right, forward));
       movingObject.position.x += dx * dt * 2.3 * speed; movingObject.position.z += dz * dt * 2.3 * speed;
       const radius = Math.hypot(movingObject.position.x, movingObject.position.z), limit = parked ? WALK_RADIUS : MOVEMENT_RADIUS;
-      if (radius > limit) { movingObject.position.x *= limit / radius; movingObject.position.z *= limit / radius; }
+      if (radius > limit) {
+        if (wiiMovement) {
+          const constrained = constrainGridMovement(movingObject.position.x, movingObject.position.z, direction, limit);
+          movingObject.position.x = constrained.x; movingObject.position.z = constrained.z;
+        } else { movingObject.position.x *= limit / radius; movingObject.position.z *= limit / radius; }
+      }
       movingObject.rotation.y = Math.atan2(-dx, -dz);
       machine.position.y = parked ? 0 : Math.abs(Math.sin(elapsed * 10)) * 0.035;
       const travel = Math.hypot(movingObject.position.x - oldX, movingObject.position.z - oldZ);

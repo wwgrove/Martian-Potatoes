@@ -79,7 +79,7 @@
         <div><span class="control-keys" data-control-prompt="park"><kbd>F</kbd></span><strong>PARK / PICK UP TOOL</strong></div>
         <div><span class="control-keys" data-control-prompt="menu"><kbd>ESC</kbd></span><strong>MENU</strong></div>
         <div><span class="control-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span><strong>ORBIT CAMERA</strong></div>
-        <div><span class="control-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><strong>CHANGE TOOL</strong></div>
+        <div><span class="control-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><strong data-tool-control-label>CHANGE TOOL</strong></div>
       </div>
       <div class="control-tip">More controls in Field Notes</div>
     </div>
@@ -127,8 +127,9 @@
           <button id="touch-work" class="work-action" aria-label="Hold to work" aria-pressed="false">WORK</button>
         </div>
         <button id="tools-toggle" class="tools-toggle" aria-expanded="false" aria-controls="tool-menu"><span id="tools-label">TOOLS</span><strong id="current-tool">Rotary tiller</strong><span aria-hidden="true">⌃</span></button>
+        <div class="wii-tool-required"><img class="controller-icon" src="assets/controller-prompts/Nintendo%20Wii/wii_button_a.png" alt="A button"><span>SELECT<br>REQUIRED TOOL</span></div>
         <div id="tool-menu" class="tool-menu">
-        <div class="tools-header"><div><span class="eyebrow">Space Shovel 001</span><h2>Choose your attachment</h2></div><span class="scroll-hint"><span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span> TO SWITCH</span></div>
+        <div class="tools-header"><div><span class="eyebrow">Space Shovel 001</span><h2>Choose your attachment</h2></div><span class="scroll-hint"><span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span> <span data-tool-hint>TO SWITCH</span></span></div>
         <div class="tools" role="group" aria-label="Attachments">
           <button class="tool active" data-tool="tiller" data-description="Counter-rotating curved tines loosen compacted regolith into an airy seedbed without pushing the tracked machine forward." aria-describedby="tool-description" aria-pressed="true"><span class="tool-number">01</span><span class="tool-symbol">✣</span><span><b>Rotary tiller</b><small>LOOSEN SOIL</small></span><kbd>1</kbd></button>
           <button class="tool" data-tool="plow" data-description="Adjustable wings open planting furrows and later hill soil around shoots, protecting tubers from light." aria-describedby="tool-description" aria-pressed="false"><span class="tool-number">02</span><span class="tool-symbol">⌄</span><span><b>Hilling plow</b><small>FURROW &amp; HILL</small></span><kbd>2</kbd></button>
@@ -140,6 +141,24 @@
       </div>
       <section id="screen-controls" class="screen-controls panel" aria-label="On-screen simulation controls" hidden>
         <div class="screen-controls-heading">ON-SCREEN CONTROLS <span>Tap a direction to move; tap again to stop</span></div>
+        <div class="controller-setting">
+          <label for="controller-style">CONTROLLER ICONS</label>
+          <select id="controller-style">
+            <option value="playstation">PlayStation 4</option>
+            <option value="ps5">PlayStation 5</option>
+            <option value="ps3">PlayStation 3</option>
+            <option value="xbox">Xbox</option>
+            <option value="switch">Nintendo Switch</option>
+            <option value="switch2">Nintendo Switch 2</option>
+            <option value="wiiu">Nintendo Wii U</option>
+            <option value="wii">Wii Remote</option>
+            <option value="gamecube">Nintendo GameCube</option>
+            <option value="steamdeck">Steam Deck</option>
+            <option value="steam">Steam Controller</option>
+            <option value="generic">Generic gamepad</option>
+          </select>
+          <small id="controller-style-status" role="status">Icons only; controller support depends on your browser and adapter.</small>
+        </div>
         <div class="screen-controls-body">
           <div class="direction-pad" role="group" aria-label="Movement">
             <button data-move="forward" aria-label="Move forward" aria-pressed="false">▲</button>
@@ -177,7 +196,7 @@
         <h2 id="intro-title">Grow potatoes on <em>Mars.</em></h2>
         <p>A tracked machine swaps powered heads to prepare, plant and harvest potatoes in a Martian habitat.</p>
         <div class="intro-plan-header"><strong>HOW TO PLAY</strong><span>SCROLL TO READ ↓</span></div>
-        <div class="gamepad-menu-help" data-gamepad-help hidden>LEFT STICK / D-PAD: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK: SCROLL</div>
+        <div class="gamepad-menu-help" data-gamepad-help hidden>D-PAD / LEFT STICK: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK / WII + &amp; −: SCROLL</div>
         <div class="intro-plan" tabindex="0" role="region" aria-label="Game instructions, scroll down to read">
           <p class="plan-intro">Move with <span class="inline-keys" data-control-prompt="move"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span data-touch-alternative> or the touch joystick</span>. Orbit with <span class="inline-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span> and zoom with <span class="inline-keys" data-control-prompt="zoom"><kbd>+</kbd><kbd>−</kbd></span>. Hold <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span><span data-touch-alternative> or Work</span> to follow blue markers and work plots; release after each objective. Change tools with <span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span>.</p>
           <ol class="plan-steps">
@@ -198,13 +217,27 @@
           <button type="button" class="reset-progress">RESET PROGRESS</button>
         </div>
         <button type="button" class="intro-music" data-music-toggle="text" aria-label="Mute music" aria-pressed="true">MUSIC: ON</button>
+        <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
+        <button type="button" class="haptics-toggle wii-sound-test" disabled>TEST WII TOOL SOUND</button>
+        <button type="button" class="haptics-toggle wii-tone-test" disabled>TEST WII TONE</button>
+        <div class="wii-calibration" data-state="idle">
+          <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
+            <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+              <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
+            </svg>
+            <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
+          </div>
+          <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
+          <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
+        </div>
+        <small class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</small>
         <small>TOUCH · MOUSE · KEYBOARD · GAMEPAD</small>
       </section>
     </div>
     <div id="info" class="overlay" hidden>
       <section class="info-card" role="dialog" aria-modal="true" aria-labelledby="info-title">
         <div class="intro-top"><span>MENU <b> / FIELD NOTES · <span class="inline-keys" data-control-prompt="menu"><kbd>ESC</kbd></span> TO CLOSE</b></span><button id="close-info" class="icon-button" aria-label="Close menu and field notes">×</button></div>
-        <div class="gamepad-menu-help" data-gamepad-help hidden>LEFT STICK / D-PAD: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK: SCROLL</div>
+        <div class="gamepad-menu-help" data-gamepad-help hidden>D-PAD / LEFT STICK: SELECT · <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> ACTIVATE · RIGHT STICK / WII + &amp; −: SCROLL</div>
         <h2 id="info-title">A farm is a system.</h2>
         <details id="audio-mixer" class="audio-mixer">
           <summary>TEMPORARY SOUND MIXER</summary>
@@ -221,9 +254,24 @@
         <p>Optional haptic feedback responds to movement and fieldwork on supported phones and controllers. Availability depends on your browser and device; this setting lasts for this session.</p>
         <button type="button" id="haptics-toggle" class="haptics-toggle" aria-pressed="true">HAPTICS: ON</button>
         <button type="button" id="sound-effects-toggle" class="haptics-toggle" aria-pressed="true">SOUND EFFECTS: ON</button>
+        <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
+        <button type="button" class="haptics-toggle wii-sound-test" disabled>TEST WII TOOL SOUND</button>
+        <button type="button" class="haptics-toggle wii-tone-test" disabled>TEST WII TONE</button>
+        <div class="wii-calibration" data-state="idle">
+          <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
+            <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+              <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
+            </svg>
+            <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
+          </div>
+          <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
+          <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
+        </div>
+        <p class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</p>
         <button type="button" class="reset-progress">RESET PROGRESS</button>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The low-profile emergency suit is a visual concept, not a validated pressure suit. The rover, soil and crops are likewise simplified.</p>
+        <p>Controller icons: <a href="https://kenney-assets.itch.io/input-prompts" target="_blank" rel="noopener">Input Prompts by Kenney</a> (CC0).</p>
         <p>Hold <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> or Work to approach and service eligible plots; release and press again after an objective completes. Use <span class="inline-keys" data-control-prompt="park"><kbd>F</kbd></span> or Park Tool to leave the machine; return to its handle to pick it up. At the white cabinet switch, press <span class="inline-keys" data-control-prompt="work"><kbd>SPACE</kbd></span> or Work to start irrigation. At night, use the same control at the habitat door to rest. Change attachments with <span class="inline-keys" data-control-prompt="tools"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span>, orbit with <span class="inline-keys" data-control-prompt="orbit"><kbd>Q</kbd><kbd>E</kbd></span>, and zoom with <span class="inline-keys" data-control-prompt="zoom"><kbd>+</kbd><kbd>−</kbd></span>. On touch devices, drag the joystick to move, swipe the view to orbit, pinch to zoom, tap a plot to target it and hold Work. Open Controls for alternative on-screen buttons. Keyboard users can also use arrows to pan, C to recenter, I and K to tilt, and the mouse wheel or trackpad to zoom. A gamepad D-pad also moves. Hover or focus an attachment for its purpose.</p>
         <p><a href="./IDES%204301B%20Assignment%201_%20Martian%20Potatoes.pdf" target="_blank" rel="noopener">READ THE SUPPORTING RESEARCH ↗</a></p>
       </section>

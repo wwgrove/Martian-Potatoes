@@ -7,6 +7,7 @@ const effects = {
   harvest: { file: 'Sifter.mp3', start: 0.08, end: 1.1, volume: 0.65 },
   water: { file: 'Watering-Noise.mp3', start: 0.05, end: 4.4, volume: 1.2 }
 };
+const remoteToolEffects = new Set(['tiller', 'drill', 'attach', 'plow', 'harvest']);
 
 export const SOUND_VOLUME_KEY = 'martian-potatoes-sound-volumes-v1';
 
@@ -33,6 +34,7 @@ export function saveSoundVolumes(storage, volumes) {
 
 export function createSoundEffects(createContext, fetchAudio, reportError, now = () => performance.now()) {
   let context = null, enabled = true, contextFailed = false, generation = 0, resumeRequest = 0;
+  let remoteOutput = null;
   const volumes = Object.fromEntries(Object.entries(effects).map(([name, effect]) => [name, effect.volume]));
   const buffers = new Map(), loops = new Map(), playing = new Map();
   function load(name) {
@@ -64,9 +66,10 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
   }
   function stopSource(source) {
     if (!source) return;
-    const { gain } = playing.get(source);
+    const { gain, name } = playing.get(source);
     playing.delete(source);
     source.onended = null;
+    if (remoteOutput && remoteToolEffects.has(name)) remoteOutput.stopTrack(source);
     source.stop();
     source.disconnect();
     gain.disconnect();
@@ -80,9 +83,14 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
     gain.gain.value = volumes[name];
     source.connect(gain); gain.connect(context.destination);
     playing.set(source, { name, gain });
-    source.onended = () => { playing.delete(source); source.disconnect(); gain.disconnect(); };
+    source.onended = () => {
+      playing.delete(source);
+      if (remoteOutput && remoteToolEffects.has(name)) remoteOutput.stopTrack(source);
+      source.disconnect(); gain.disconnect();
+    };
     if (loop) source.start(0, effect.start);
     else source.start(0, effect.start, effect.end - effect.start);
+    if (remoteOutput && remoteToolEffects.has(name)) remoteOutput.start(source, name, buffer, effect, volumes[name], loop);
     return source;
   }
   function stopAll() {
@@ -101,11 +109,23 @@ export function createSoundEffects(createContext, fetchAudio, reportError, now =
   }
   return {
     unlock,
+    setRemoteOutput(output) {
+      if (remoteOutput === output) return;
+      if (remoteOutput) for (const [source, entry] of playing) {
+        if (remoteToolEffects.has(entry.name)) remoteOutput.stopTrack(source);
+      }
+      remoteOutput = output;
+      for (const [source, entry] of playing) {
+        if (!remoteToolEffects.has(entry.name)) continue;
+        if (remoteOutput) remoteOutput.start(source, entry.name, source.buffer, effects[entry.name], volumes[entry.name], source.loop);
+      }
+    },
     getVolumes() { return { ...volumes }; },
     setVolume(name, value) {
       if (!effects[name]) throw new RangeError(`Unknown sound effect: ${name}`);
       if (!Number.isFinite(value) || value < 0 || value > 2) throw new RangeError('Sound volume must be between 0 and 2.');
       volumes[name] = value;
+      if (remoteOutput && remoteToolEffects.has(name)) remoteOutput.setVolume(name, value);
       for (const entry of playing.values()) {
         if (entry.name === name) entry.gain.gain.value = value;
       }

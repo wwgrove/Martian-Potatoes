@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pressKeyboardKey, readGamepad, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from '../src/controls.js';
+import { pressKeyboardKey, readGamepad, createGamepadSelector, newlyPressed, joystickVector, createTouchCamera, wheelZoomDelta } from '../src/controls.js';
 import { cameraRelativeMovement } from '../src/simulation.js';
 
 test('system shortcuts release held keys and stray repeats cannot restart movement', () => {
@@ -43,6 +43,26 @@ test('a disconnected gamepad releases all controls', () => {
   assert.equal(input.forward, 0);
   assert.equal(input.orbit, 0);
   assert.equal(input.buttons.some(Boolean), false);
+});
+
+test('controller selection follows new input without replaying held buttons', () => {
+  const selector = createGamepadSelector();
+  const pad = (index, id) => ({ index, id, axes: [0, 0, 0, 0], buttons: Array.from({ length: 16 }, () => ({ pressed: false })) });
+  const ps = pad(0, 'Wireless Controller'), wii = pad(1000, 'Wii Remote');
+  assert.equal(selector.update([ps, wii]).pad, wii);
+  ps.buttons[1].pressed = true;
+  assert.equal(selector.update([ps, wii]).pad, ps);
+  wii.buttons[5].pressed = true;
+  assert.equal(selector.update([ps, wii]).pad, wii);
+  ps.axes[0] = 0.8;
+  assert.equal(selector.update([ps, wii]).pad, wii);
+  ps.buttons[0].pressed = true;
+  const switched = selector.update([ps, wii]);
+  assert.equal(switched.pad, ps);
+  assert.equal(switched.previousButtons[1], true);
+  assert.equal(switched.previousButtons[0], false);
+  assert.equal(selector.update([wii]).pad, wii);
+  assert.equal(selector.update([]), null);
 });
 
 test('gamepad movement preserves analog direction and magnitude around the full stick', () => {

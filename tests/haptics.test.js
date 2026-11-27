@@ -56,6 +56,26 @@ test('gamepad rumble is routed to the controller and stopped on disconnect or di
   assert.equal(phone.length, 2);
 });
 
+test('Wii feedback lasts 25% longer without changing other gamepads', () => {
+  const calls = [];
+  const actuator = {
+    playEffect: (type, options) => { calls.push(options.duration); return Promise.resolve('complete'); },
+    reset: () => { calls.push('reset'); return Promise.resolve('complete'); }
+  };
+  const haptics = createHaptics({});
+  haptics.setSource('gamepad');
+  haptics.setGamepad({ id: 'Wii Remote', index: 1000, vibrationActuator: actuator });
+  haptics.trigger('complete', 0);
+  assert.equal(calls[0], 40);
+  haptics.update(null, 35);
+  assert.deepEqual(calls, [40]);
+  haptics.update(null, 41);
+  assert.equal(calls.at(-1), 'reset');
+  haptics.setGamepad({ id: 'Other controller', index: 0, vibrationActuator: actuator });
+  haptics.trigger('complete', 100);
+  assert.equal(calls.at(-1), 32);
+});
+
 test('unsupported devices are safe and rejected controller effects are reported once', async () => {
   const errors = [];
   const haptics = createHaptics({}, error => errors.push(error));

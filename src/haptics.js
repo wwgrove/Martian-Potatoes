@@ -35,7 +35,8 @@ export function createHaptics(navigator, reportError = error => console.warn('Ha
   function emit(name, now, event) {
     const effect = effects[name];
     if (!effect) throw new RangeError(`Unknown haptic effect: ${name}`);
-    const duration = effect.pattern.reduce((sum, value) => sum + value, 0);
+    const baseDuration = effect.pattern.reduce((sum, value) => sum + value, 0);
+    const duration = source === 'gamepad' && gamepad?.id === 'Wii Remote' ? baseDuration * 1.25 : baseDuration;
     if (source === 'touch' && typeof navigator.vibrate === 'function') {
       try {
         if (!navigator.vibrate(effect.pattern)) report(new Error('Device vibration request was rejected.'));
