@@ -1,4 +1,4 @@
-import { createWiiSpeaker } from './wii-speaker.js';
+import { createWiiSpeaker, WII_SPEAKER_RATE } from './wii-speaker.js';
 import { createSidewaysDpad, createWiiMotion, parseMotionCalibration, readMotionSample } from './wii-motion.js';
 
 const VENDOR = 0x057e, PRODUCT = 0x0330;
@@ -142,7 +142,10 @@ export function createWiiRemote(hid, onStatus, onError) {
     await delay(35);
     await writeRegister(0x09, [0x01], 0xa2, true);
     await writeRegister(0x01, [0x08], 0xa2, true);
-    await writeRegister(0x01, [0x00, 0x00, 0xd0, 0x07, 0x40, 0x00, 0x00], 0xa2, true);
+    const divisor = 12000000 / WII_SPEAKER_RATE;
+    await writeRegister(0x01, [0x00, 0x00, divisor & 0xff, divisor >> 8, 0x40, 0x00, 0x00], 0xa2, true);
+    // Reset the remote's ADPCM decoder to match the encoder's initial state.
+    await writeRegister(0x07, [0x02], 0xa2, true);
     await writeRegister(0x08, [0x01], 0xa2, true);
     await sendConfirmed(0x19, [0]);
     const status = await waitForReport(0x20, data => data.byteLength >= 3 ? data.getUint8(2) : null,

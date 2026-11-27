@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWiiRemote } from '../src/wii-remote.js';
-import { createWiiSpeaker, amplifyWiiSample, createWiiTestScale } from '../src/wii-speaker.js';
+import { createWiiSpeaker, amplifyWiiSample, createWiiTestScale, WII_SPEAKER_RATE } from '../src/wii-speaker.js';
 import { readGamepad } from '../src/controls.js';
 import { createSidewaysDpad } from '../src/wii-motion.js';
 
@@ -74,7 +74,11 @@ test('Wii Remote connects with two pulses, tracks tools and maps core buttons', 
   await remote.connect();
   assert.equal(remote.hasSpeaker, true);
   assert.match(statuses.at(-1), /Speaker setup acknowledged/);
-  assert.ok(reports.some(([id, data]) => id === 0x16 && data.slice(0, 10).join(',') === '6,162,0,1,7,0,0,208,7,64'));
+  const config = reports.find(([id, data]) => id === 0x16 && data[1] === 0xa2 && data[3] === 1 && data[4] === 7);
+  assert.ok(config);
+  assert.equal(12000000 / (config[1][7] | config[1][8] << 8), WII_SPEAKER_RATE);
+  assert.deepEqual(config[1].slice(5, 12), [0, 0, 0xd0, 0x07, 0x40, 0, 0]);
+  assert.ok(reports.some(([id, data]) => id === 0x16 && data[1] === 0xa2 && data[3] === 7 && data[4] === 1 && data[5] === 2));
   await wait(280);
   assert.deepEqual(reports.filter(([id]) => id === 0x11).slice(-4).map(([, data]) => data[0]),
     [0x11, 0x10, 0x11, 0x10]);

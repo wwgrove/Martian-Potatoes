@@ -952,14 +952,14 @@ document.querySelectorAll('.wii-sound-test').forEach(button => {
     wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
     document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending auger test sound to the Wii Remote for four seconds (experimental).'; });
   });
-  document.querySelectorAll('.wii-tone-test').forEach(button => {
-    button.addEventListener('click', () => {
-      if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
-      stopWiiSoundTest();
-      wii.sound.testTone(wiiToneTest);
-      wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
-      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending an F-sharp major scale to the Wii Remote for four seconds (experimental).'; });
-    });
+});
+document.querySelectorAll('.wii-tone-test').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
+    stopWiiSoundTest();
+    wii.sound.testTone(wiiToneTest);
+    wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
+    document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending an F-sharp major scale to the Wii Remote for four seconds (experimental).'; });
   });
 });
 wii.setTool(activeTool);
