@@ -1,17 +1,14 @@
-import { createWiiSpeaker, WII_SPEAKER_RATE } from './wii-speaker.js';
 import { createSidewaysDpad, createWiiMotion, parseMotionCalibration, readMotionSample } from './wii-motion.js';
 
 const VENDOR = 0x057e, PRODUCT = 0x0330;
 const LEDS = { tiller: 0x10, plow: 0x20, auger: 0x40, sifter: 0x80 };
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-class WiiReportTimeout extends Error {}
-
 export function createWiiRemote(hid, onStatus, onError) {
   let device = null, buttons = Array(16).fill(false), motion = null, cancelCalibration = null;
   const dpad = createSidewaysDpad();
   let rumble = false, led = LEDS.tiller, rumbleTimer = null, pulseGeneration = 0;
-  let connection = 0, speakerReady = false, speakerPowered = false, hapticsEnabled = true;
+  let connection = 0, hapticsEnabled = true;
 
   function report(error) { onError(error); }
   async function send(id, bytes) {
@@ -51,45 +48,10 @@ export function createWiiRemote(hid, onStatus, onError) {
     },
     reset() { cancelRumble(); return Promise.resolve('complete'); }
   };
-  const speaker = createWiiSpeaker(send, error => {
-    speakerReady = false;
-    report(new Error(`Wii Remote speaker failed: ${error.message}`));
-  });
-  function waitForReport(reportId, match, sendRequest, description) {
-    const target = device;
-    return new Promise((resolve, reject) => {
-      let done = false;
-      const timer = setTimeout(() => finish(new WiiReportTimeout(`${description} timed out.`)), 1500);
-      function finish(error, result) {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        target.removeEventListener('inputreport', receive);
-        if (error) reject(error); else resolve(result);
-      }
-      function receive(event) {
-        if (event.reportId !== reportId) return;
-        const result = match(event.data);
-        if (result !== null) finish(result instanceof Error ? result : null, result);
-      }
-      target.addEventListener('inputreport', receive);
-      sendRequest().catch(finish);
-    });
-  }
-  function sendConfirmed(id, bytes) {
-    const data = Uint8Array.from(bytes);
-    data[0] |= 0x02;
-    return waitForReport(0x22, report => {
-      if (report.byteLength < 4 || report.getUint8(2) !== id) return null;
-      const error = report.getUint8(3);
-      return error ? new Error(`Wii Remote rejected speaker command 0x${id.toString(16)} (error ${error}).`) : true;
-    }, () => send(id, data), `Wii Remote speaker command 0x${id.toString(16)}`);
-  }
-  async function writeRegister(address, data, bank = 0xa2, confirm = false) {
+  async function writeRegister(address, data, bank) {
     const bytes = new Uint8Array(21);
     bytes.set([0x04, bank, 0x00, address, data.length, ...data]);
-    if (confirm) await sendConfirmed(0x16, bytes);
-    else await send(0x16, bytes);
+    await send(0x16, bytes);
     await delay(35);
   }
   function readCalibration() {
@@ -128,32 +90,6 @@ export function createWiiRemote(hid, onStatus, onError) {
     motion = createWiiMotion(calibration);
     await send(0x12, [0x04, 0x32]);
   }
-  async function initSpeaker() {
-    speakerPowered = true;
-    try {
-      await sendConfirmed(0x14, [0x04]);
-    } catch (error) {
-      if (!(error instanceof WiiReportTimeout)) throw error;
-      await delay(1000);
-      await sendConfirmed(0x14, [0x04]);
-    }
-    await delay(150);
-    await sendConfirmed(0x19, [0x04]);
-    await delay(35);
-    await writeRegister(0x09, [0x01], 0xa2, true);
-    await writeRegister(0x01, [0x08], 0xa2, true);
-    const divisor = 12000000 / WII_SPEAKER_RATE;
-    await writeRegister(0x01, [0x00, 0x00, divisor & 0xff, divisor >> 8, 0x40, 0x00, 0x00], 0xa2, true);
-    // Reset the remote's ADPCM decoder to match the encoder's initial state.
-    await writeRegister(0x07, [0x02], 0xa2, true);
-    await writeRegister(0x08, [0x01], 0xa2, true);
-    await sendConfirmed(0x19, [0]);
-    const status = await waitForReport(0x20, data => data.byteLength >= 3 ? data.getUint8(2) : null,
-      () => send(0x15, [0]), 'Wii Remote speaker status');
-    if (!(status & 0x04)) throw new Error('Wii Remote reports that its speaker is disabled.');
-    speakerReady = true;
-    speaker.enable();
-  }
   function input(event) {
     if (![0x20, 0x21, 0x22, 0x30, 0x32].includes(event.reportId)) return;
     if (event.data.byteLength < 2) return;
@@ -176,8 +112,6 @@ export function createWiiRemote(hid, onStatus, onError) {
     connection++;
     if (cancelCalibration) cancelCalibration(new Error('Wii Remote disconnected during calibration.'));
     cancelRumble();
-    speaker.stop();
-    speakerReady = false; speakerPowered = false;
     if (device) device.removeEventListener('inputreport', input);
     device = null;
     buttons.fill(false); dpad.clear(); motion = null;
@@ -211,25 +145,11 @@ export function createWiiRemote(hid, onStatus, onError) {
           report(new Error(`MotionPlus unavailable: ${error.message}`));
           await send(0x12, [0, 0x30]);
         }
-        let speakerError = null;
-        try { await initSpeaker(); }
-        catch (error) {
-          if (current !== connection || !device?.opened) throw error;
-          speakerError = error;
-          report(new Error(`Wii Remote speaker unavailable: ${error.message}`));
-          if (speakerPowered) {
-            try { await send(0x19, [0x04]); await send(0x14, [0]); speakerPowered = false; }
-            catch (cleanupError) { report(new Error(`Could not turn off Wii Remote speaker: ${cleanupError.message}`)); }
-          }
-        }
         if (current !== connection) return;
         pulse([75, 80, 75]);
-        const problems = [];
-        if (motionError) problems.push(`MotionPlus unavailable: ${motionError.message}`);
-        else problems.push('Calibrate MotionPlus before using B to move the camera.');
-        if (speakerError) problems.push(`speaker unavailable: ${speakerError.message}`);
-        else problems.push('Speaker setup acknowledged; test playback to confirm sound.');
-        onStatus(`Wii Remote connected. ${problems.join(' ')}`);
+        const detail = motionError ? `MotionPlus unavailable: ${motionError.message}` :
+          'Calibrate MotionPlus before using B to move the camera.';
+        onStatus(`Wii Remote connected. ${detail}`);
       } catch (error) {
         const failed = device;
         clearDevice();
@@ -241,20 +161,11 @@ export function createWiiRemote(hid, onStatus, onError) {
       if (!device) return;
       const closing = device;
       cancelRumble();
-      speaker.stop();
-      try {
-        if (closing.opened && speakerPowered) {
-          await send(0x19, [0x04]);
-          await send(0x14, [0]);
-        }
-      } finally {
-        clearDevice();
-        if (closing.opened) await closing.close();
-        onStatus('Wii Remote disconnected.');
-      }
+      clearDevice();
+      if (closing.opened) await closing.close();
+      onStatus('Wii Remote disconnected.');
     },
     get connected() { return Boolean(device?.opened); },
-    get hasSpeaker() { return speakerReady; },
     get hasMotion() { return Boolean(motion); },
     stopCalibration() {
       if (!cancelCalibration) return;
@@ -316,7 +227,6 @@ export function createWiiRemote(hid, onStatus, onError) {
       if (led !== LEDS[tool]) { led = LEDS[tool]; if (device?.opened) sendFeedback(); }
     },
     setHapticsEnabled(value) { hapticsEnabled = value; if (!value) cancelRumble(); },
-    stopRumble: cancelRumble,
-    sound: speaker
+    stopRumble: cancelRumble
   };
 }

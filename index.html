@@ -216,21 +216,27 @@
           <button id="start-button" class="primary-button">ENTER THE HABITAT <span>↗</span></button>
           <button type="button" class="reset-progress">RESET PROGRESS</button>
         </div>
-        <button type="button" class="intro-music" data-music-toggle="text" aria-label="Mute music" aria-pressed="true">MUSIC: ON</button>
-        <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
-        <button type="button" class="haptics-toggle wii-sound-test" disabled>TEST WII TOOL SOUND</button>
-        <button type="button" class="haptics-toggle wii-tone-test" disabled>TEST WII TONE</button>
-        <div class="wii-calibration" data-state="idle">
-          <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
-            <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-              <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
-            </svg>
-            <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
-          </div>
-          <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
-          <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
+        <div class="intro-preferences">
+          <span>EXPERIENCE SETTINGS</span>
+          <button type="button" class="intro-music" data-music-toggle="text" aria-label="Mute music" aria-pressed="true">MUSIC: ON</button>
         </div>
-        <small class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</small>
+        <section class="wii-panel" aria-label="Wii Remote">
+          <div class="wii-panel-heading"><strong>WII REMOTE</strong><span>OPTIONAL</span></div>
+          <p class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</p>
+          <div class="wii-panel-actions">
+            <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
+            <div class="wii-calibration" data-state="idle">
+              <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
+              <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
+              <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
+                <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                  <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
+                </svg>
+                <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
+              </div>
+            </div>
+          </div>
+        </section>
         <small>TOUCH · MOUSE · KEYBOARD · GAMEPAD</small>
       </section>
     </div>
@@ -254,20 +260,23 @@
         <p>Optional haptic feedback responds to movement and fieldwork on supported phones and controllers. Availability depends on your browser and device; this setting lasts for this session.</p>
         <button type="button" id="haptics-toggle" class="haptics-toggle" aria-pressed="true">HAPTICS: ON</button>
         <button type="button" id="sound-effects-toggle" class="haptics-toggle" aria-pressed="true">SOUND EFFECTS: ON</button>
-        <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
-        <button type="button" class="haptics-toggle wii-sound-test" disabled>TEST WII TOOL SOUND</button>
-        <button type="button" class="haptics-toggle wii-tone-test" disabled>TEST WII TONE</button>
-        <div class="wii-calibration" data-state="idle">
-          <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
-            <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-              <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
-            </svg>
-            <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
+        <section class="wii-panel" aria-label="Wii Remote">
+          <div class="wii-panel-heading"><strong>WII REMOTE</strong><span>OPTIONAL</span></div>
+          <p class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</p>
+          <div class="wii-panel-actions">
+            <button type="button" class="haptics-toggle wii-connect">CONNECT WII REMOTE</button>
+            <div class="wii-calibration" data-state="idle">
+              <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
+              <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
+              <div class="wii-calibration-status" role="status" aria-live="polite" hidden>
+                <svg class="wii-calibration-indicator" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+                  <rect x="4" y="12" width="24" height="8" rx="3"/><path d="M8 16h4m-2-2v4m9-2h1m3 0h1"/>
+                </svg>
+                <div><strong class="wii-calibration-state"></strong><span class="wii-calibration-detail"></span></div>
+              </div>
+            </div>
           </div>
-          <button type="button" class="haptics-toggle wii-calibrate" disabled>CALIBRATE WII MOTION</button>
-          <button type="button" class="haptics-toggle wii-calibration-stop" hidden>STOP CALIBRATION</button>
-        </div>
-        <p class="wii-status" role="status">Wii Remote Plus: pair in Windows first.</p>
+        </section>
         <button type="button" class="reset-progress">RESET PROGRESS</button>
         <p>On Earth, potatoes need consistent moisture, especially during tuber development. The <a href="https://extension.umn.edu/garden-and-home/yard-and-garden/gardening-in-minnesota/growing-potatoes" target="_blank" rel="noopener">University of Minnesota Extension</a> recommends roughly an inch of water per week and watering once or twice weekly, more often in sandy soil. A Mars habitat would need moisture sensing and site-specific irrigation; this demo does not model water quantities or prescribe an operating schedule.</p>
         <p>The astronaut's walking animation is illustrative, not a physical simulation of movement in Mars gravity. The low-profile emergency suit is a visual concept, not a validated pressure suit. The rover, soil and crops are likewise simplified.</p>

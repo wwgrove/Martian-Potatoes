@@ -863,33 +863,18 @@ const touchCamera = createTouchCamera();
 const gamepadMenu = createGamepadMenu();
 const gamepadSelector = createGamepadSelector();
 const haptics = createHaptics(navigator);
-let wiiCalibrating = false, previousWiiConnected = false, wiiSoundTestTimer = null;
-const wiiToneTest = {};
-function stopWiiSoundTest() {
-  if (wiiSoundTestTimer !== null) clearTimeout(wiiSoundTestTimer);
-  wiiSoundTestTimer = null;
-  sounds.setLoop('wii-test', null);
-  wii.sound.stopTrack(wiiToneTest);
-}
+let wiiCalibrating = false, previousWiiConnected = false;
 const wii = createWiiRemote(navigator.hid, status => {
   if (previousWiiConnected !== wii.connected && !wiiCalibrating) renderWiiCalibration('idle');
   previousWiiConnected = wii.connected;
-  if (!wii.connected || !wii.hasSpeaker) stopWiiSoundTest();
-  sounds.setRemoteOutput(wii.connected && wii.hasSpeaker ? wii.sound : null);
   document.body.dataset.wiiConnected = String(wii.connected);
   document.querySelectorAll('.wii-status').forEach(element => { element.textContent = status; });
   document.querySelectorAll('.wii-calibrate').forEach(button => { button.disabled = !wii.connected || !wii.hasMotion || wiiCalibrating; });
-  document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = !wii.connected || !wii.hasSpeaker || !soundEffectsEnabled; });
   document.querySelectorAll('.wii-connect').forEach(button => {
     button.textContent = wii.connected ? 'DISCONNECT WII REMOTE' : 'CONNECT WII REMOTE';
   });
 }, error => {
   console.error('Wii Remote:', error);
-  if (!wii.hasSpeaker) {
-    stopWiiSoundTest();
-    sounds.setRemoteOutput(null);
-    document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = true; });
-  }
   document.querySelectorAll('.wii-status').forEach(element => { element.textContent = `Wii Remote: ${error.message}`; });
 });
 function renderWiiCalibration(state, detail = '') {
@@ -939,28 +924,6 @@ document.querySelectorAll('.wii-calibrate').forEach(button => {
 });
 document.querySelectorAll('.wii-calibration-stop').forEach(button => {
   button.addEventListener('click', () => wii.stopCalibration());
-});
-document.querySelectorAll('.wii-sound-test').forEach(button => {
-  button.addEventListener('click', () => {
-    if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
-    if (sounds.getVolumes().drill === 0) {
-      document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'The auger volume is zero. Raise it in the sound mixer to test.'; });
-      return;
-    }
-    stopWiiSoundTest();
-    sounds.setLoop('wii-test', 'drill');
-    wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
-    document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending auger test sound to the Wii Remote for four seconds (experimental).'; });
-  });
-});
-document.querySelectorAll('.wii-tone-test').forEach(button => {
-  button.addEventListener('click', () => {
-    if (!wii.connected || !wii.hasSpeaker || !soundEffectsEnabled) return;
-    stopWiiSoundTest();
-    wii.sound.testTone(wiiToneTest);
-    wiiSoundTestTimer = setTimeout(stopWiiSoundTest, 4000);
-    document.querySelectorAll('.wii-status').forEach(element => { element.textContent = 'Sending an F-sharp major scale to the Wii Remote for four seconds (experimental).'; });
-  });
 });
 wii.setTool(activeTool);
 document.querySelectorAll('.wii-connect').forEach(button => {
@@ -1511,10 +1474,9 @@ $('haptics-toggle').addEventListener('click', event => {
 });
 $('sound-effects-toggle').addEventListener('click', event => {
   const enabled = event.currentTarget.getAttribute('aria-pressed') !== 'true';
-  if (!enabled) { stopPreview(); stopWiiSoundTest(); }
+  if (!enabled) stopPreview();
   soundEffectsEnabled = enabled;
   sounds.setEnabled(enabled);
-  document.querySelectorAll('.wii-sound-test, .wii-tone-test').forEach(button => { button.disabled = !enabled || !wii.connected || !wii.hasSpeaker; });
   $('audio-mixer-controls').querySelectorAll('button').forEach(button => { button.disabled = !enabled; });
   event.currentTarget.setAttribute('aria-pressed', String(enabled));
   event.currentTarget.textContent = `SOUND EFFECTS: ${enabled ? 'ON' : 'OFF'}`;

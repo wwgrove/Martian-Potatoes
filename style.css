@@ -486,8 +486,22 @@ body:not([data-input-mode=keyboard]):not([data-input-mode=touch]) :focus{outline
 @media(max-width:600px) and (orientation:portrait), (pointer:coarse) and (orientation:portrait){
   body[data-wii-connected=true] .wii-tool-required{position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 24px);margin:0;box-shadow:0 3px 12px #10141255}
 }
-.intro-card:has(.wii-calibration-status:not([hidden])){overflow-y:auto}
-.wii-calibration .haptics-toggle{margin-top:8px}
+.intro-card{overflow-y:auto}
+.intro-preferences{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 8px}
+.intro-preferences>span,.wii-panel-heading{font-size:9px;font-weight:700;letter-spacing:.12em;color:#aab8ad}
+.intro-preferences .intro-music{align-self:auto;margin:0;min-height:36px;border-radius:6px}
+.wii-panel{padding:12px;border:1px solid #ffffff24;border-radius:8px;background:#1c2420}
+.info-card .wii-panel{margin:12px 0}
+.wii-panel-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.wii-panel-heading strong{color:#f5f2e7}
+.wii-panel-heading span{color:#91a497;font-size:8px}
+.wii-panel .wii-status{margin:7px 0 10px;color:#b8c8b7;font-size:11px;line-height:1.4;letter-spacing:0}
+.wii-panel-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.wii-calibration{display:contents}
+.wii-panel-actions button{width:100%;min-width:0;padding:8px;font-size:9px}
+.wii-panel-actions button:disabled{opacity:.5;cursor:not-allowed}
+.wii-calibration-status{grid-column:1/-1}
+@media(max-width:360px){.wii-panel-actions{grid-template-columns:1fr}}
 .wii-calibration-status{display:flex;align-items:center;gap:12px;padding:14px;background:#303a32;border-left:3px solid #f5922f;border-radius:4px}
 .wii-calibration-status strong,.wii-calibration-status span:not(.wii-calibration-indicator){display:block}
 .wii-calibration-status strong{font-size:10px;letter-spacing:.12em;color:#f3a45b}
